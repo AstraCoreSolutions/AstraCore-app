@@ -60,6 +60,10 @@ class NavigationManager {
                         event.preventDefault();
                         this.navigateToByIndex(2); // Finance
                         break;
+                    case '4':
+                        event.preventDefault();
+                        this.navigateToByIndex(3); // Invoices
+                        break;
                     // Add more shortcuts as needed
                 }
             }
@@ -118,8 +122,10 @@ class NavigationManager {
             this.currentPage = page;
             window.appState.currentPage = page;
             
-            // Load page data
-            this.loadPageData(page);
+            // Load page data (with delay to ensure DOM is ready)
+            setTimeout(() => {
+                this.loadPageData(page);
+            }, 100);
             
             // Scroll to top
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -235,6 +241,9 @@ class NavigationManager {
     loadPageData(page) {
         Utils.Debug.log(`Loading data for page: ${page}`);
 
+        // First update statistics for all pages
+        this.updatePageStatistics(page);
+
         switch(page) {
             case 'dashboard':
                 if (window.DashboardManager) {
@@ -249,36 +258,42 @@ class NavigationManager {
                 break;
                 
             case 'finance':
+                this.updateFinanceStats();
                 if (window.TableManager) {
                     window.TableManager.loadTransactionsTable();
                 }
                 break;
                 
             case 'invoices':
+                this.updateInvoiceStats();
                 if (window.TableManager) {
                     window.TableManager.loadInvoicesTable();
                 }
                 break;
                 
             case 'employees':
+                this.updateEmployeeStats();
                 if (window.TableManager) {
                     window.TableManager.loadEmployeesTable();
                 }
                 break;
                 
             case 'equipment':
+                this.updateEquipmentStats();
                 if (window.TableManager) {
                     window.TableManager.loadEquipmentTable();
                 }
                 break;
                 
             case 'materials':
+                this.updateMaterialStats();
                 if (window.TableManager) {
                     window.TableManager.loadMaterialsTable();
                 }
                 break;
                 
             case 'reports':
+                this.updateReportStats();
                 if (window.ReportsManager) {
                     window.ReportsManager.initializeReports();
                 }
@@ -292,6 +307,211 @@ class NavigationManager {
                 
             default:
                 Utils.Debug.log(`No specific data loader for page: ${page}`);
+        }
+    }
+
+    /**
+     * Update page statistics
+     */
+    updatePageStatistics(page) {
+        const data = window.appState.data;
+        if (!data) return;
+
+        switch(page) {
+            case 'finance':
+                this.updateFinanceStats();
+                break;
+            case 'invoices':
+                this.updateInvoiceStats();
+                break;
+            case 'employees':
+                this.updateEmployeeStats();
+                break;
+            case 'equipment':
+                this.updateEquipmentStats();
+                break;
+            case 'materials':
+                this.updateMaterialStats();
+                break;
+            case 'reports':
+                this.updateReportStats();
+                break;
+        }
+    }
+
+    /**
+     * Update finance statistics
+     */
+    updateFinanceStats() {
+        const data = window.appState.data;
+        if (!data.transactions) return;
+
+        const totalIncome = data.transactions
+            .filter(t => t.type === 'income')
+            .reduce((sum, t) => sum + (parseFloat(t.total_amount) || 0), 0);
+
+        const totalExpenses = data.transactions
+            .filter(t => t.type === 'expense')
+            .reduce((sum, t) => sum + (parseFloat(t.total_amount) || 0), 0);
+
+        const netProfit = totalIncome - totalExpenses;
+
+        // Current month
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        
+        const monthlyTransactions = data.transactions.filter(t => {
+            const date = new Date(t.transaction_date || t.created_at);
+            return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+        });
+
+        const monthlyIncome = monthlyTransactions
+            .filter(t => t.type === 'income')
+            .reduce((sum, t) => sum + (parseFloat(t.total_amount) || 0), 0);
+
+        const monthlyExpenses = monthlyTransactions
+            .filter(t => t.type === 'expense')
+            .reduce((sum, t) => sum + (parseFloat(t.total_amount) || 0), 0);
+
+        const monthlyBalance = monthlyIncome - monthlyExpenses;
+
+        // Update elements
+        this.updateStatElement('totalIncome', Utils.Currency.format(totalIncome));
+        this.updateStatElement('totalExpenses', Utils.Currency.format(totalExpenses));
+        this.updateStatElement('netProfit', Utils.Currency.format(netProfit));
+        this.updateStatElement('monthlyBalance', Utils.Currency.format(monthlyBalance));
+    }
+
+    /**
+     * Update invoice statistics
+     */
+    updateInvoiceStats() {
+        const data = window.appState.data;
+        if (!data.invoices) return;
+
+        const totalAmount = data.invoices.reduce((sum, i) => sum + (parseFloat(i.total_amount) || 0), 0);
+        const pendingCount = data.invoices.filter(i => i.status === 'pending').length;
+        const paidCount = data.invoices.filter(i => i.status === 'paid').length;
+        const overdueCount = data.invoices.filter(i => {
+            return i.status === 'pending' && Utils.Date.isPast(i.due_date);
+        }).length;
+
+        this.updateStatElement('totalInvoiceAmount', Utils.Currency.format(totalAmount));
+        this.updateStatElement('pendingInvoices', pendingCount);
+        this.updateStatElement('paidInvoices', paidCount);
+        this.updateStatElement('overdueInvoices', overdueCount);
+    }
+
+    /**
+     * Update employee statistics
+     */
+    updateEmployeeStats() {
+        const data = window.appState.data;
+        if (!data.employees) return;
+
+        const totalEmployees = data.employees.length;
+        const activeEmployees = data.employees.filter(e => e.status === 'active').length;
+        const todayPresent = 0; // TODO: Implement attendance tracking
+        
+        // Calculate average salary
+        const salaries = data.employees
+            .filter(e => e.monthly_salary || e.hourly_rate)
+            .map(e => e.monthly_salary || (e.hourly_rate * 160)); // 160 hours per month
+        
+        const averageSalary = salaries.length > 0 ? 
+            salaries.reduce((sum, s) => sum + s, 0) / salaries.length : 0;
+
+        this.updateStatElement('totalEmployees', totalEmployees);
+        this.updateStatElement('activeEmployees', activeEmployees);
+        this.updateStatElement('todayPresent', todayPresent);
+        this.updateStatElement('averageSalary', Utils.Currency.format(averageSalary));
+    }
+
+    /**
+     * Update equipment statistics
+     */
+    updateEquipmentStats() {
+        const data = window.appState.data;
+        if (!data.equipment) return;
+
+        const totalEquipment = data.equipment.length;
+        const availableEquipment = data.equipment.filter(e => e.status === 'available').length;
+        const borrowedEquipment = data.equipment.filter(e => e.status === 'borrowed').length;
+        const serviceEquipment = data.equipment.filter(e => e.status === 'service').length;
+
+        this.updateStatElement('totalEquipment', totalEquipment);
+        this.updateStatElement('availableEquipment', availableEquipment);
+        this.updateStatElement('borrowedEquipment', borrowedEquipment);
+        this.updateStatElement('serviceEquipment', serviceEquipment);
+    }
+
+    /**
+     * Update material statistics
+     */
+    updateMaterialStats() {
+        const data = window.appState.data;
+        if (!data.materials) return;
+
+        const totalMaterials = data.materials.length;
+        const inStockMaterials = data.materials.length; // All materials are considered in stock for now
+        const lowStockMaterials = 0; // TODO: Implement stock levels
+        const stockValue = 0; // TODO: Calculate based on purchase prices
+
+        this.updateStatElement('totalMaterials', totalMaterials);
+        this.updateStatElement('inStockMaterials', inStockMaterials);
+        this.updateStatElement('lowStockMaterials', lowStockMaterials);
+        this.updateStatElement('stockValue', Utils.Currency.format(stockValue));
+    }
+
+    /**
+     * Update report statistics
+     */
+    updateReportStats() {
+        const data = window.appState.data;
+        if (!data) return;
+
+        const totalProjects = data.projects ? data.projects.length : 0;
+        const totalRevenue = data.transactions ? 
+            data.transactions
+                .filter(t => t.type === 'income')
+                .reduce((sum, t) => sum + (parseFloat(t.total_amount) || 0), 0) : 0;
+        const totalEmployees = data.employees ? data.employees.length : 0;
+        
+        // Calculate average project duration
+        let avgProjectDuration = 0;
+        if (data.projects && data.projects.length > 0) {
+            const completedProjects = data.projects.filter(p => 
+                p.status === 'completed' && p.start_date && p.end_date
+            );
+            
+            if (completedProjects.length > 0) {
+                const totalDays = completedProjects.reduce((sum, p) => {
+                    return sum + Utils.Date.daysDifference(p.start_date, p.end_date);
+                }, 0);
+                avgProjectDuration = Math.round(totalDays / completedProjects.length);
+            }
+        }
+
+        this.updateStatElement('reportTotalProjects', totalProjects);
+        this.updateStatElement('reportTotalRevenue', Utils.Currency.format(totalRevenue));
+        this.updateStatElement('reportTotalEmployees', totalEmployees);
+        this.updateStatElement('reportAvgProjectDuration', avgProjectDuration);
+    }
+
+    /**
+     * Update statistic element
+     * @param {string} elementId - Element ID
+     * @param {string|number} value - Value to display
+     */
+    updateStatElement(elementId, value) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            // Add animation
+            element.style.opacity = '0.5';
+            setTimeout(() => {
+                element.textContent = value;
+                element.style.opacity = '1';
+            }, 150);
         }
     }
 
@@ -453,6 +673,13 @@ class NavigationManager {
         window.addEventListener('hashchange', () => {
             this.handleHashChange();
         });
+    }
+
+    /**
+     * Refresh current page data
+     */
+    refreshCurrentPageData() {
+        this.loadPageData(this.currentPage);
     }
 }
 
