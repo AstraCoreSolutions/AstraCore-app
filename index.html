@@ -275,6 +275,35 @@
                         </div>
                     </div>
 
+                    <!-- Charts Row -->
+                    <div class="row mb-4">
+                        <div class="col-lg-8 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">Cash Flow (posledních 4 měsíců)</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="chart-container">
+                                        <canvas id="cashFlowChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-lg-4 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">Stav projektů</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="chart-container">
+                                        <canvas id="projectStatusChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Recent Activity -->
                     <div class="row">
                         <div class="col-lg-8 mb-4">
@@ -333,17 +362,48 @@
                         </div>
                     </div>
 
+                    <!-- Filter Bar -->
+                    <div class="filter-bar">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="search-box">
+                                    <input type="text" class="form-control table-search" placeholder="Hledat projekty...">
+                                    <i class="fas fa-search search-icon"></i>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-select table-filter" name="status">
+                                    <option value="">Všechny stavy</option>
+                                    <option value="planning">Plánování</option>
+                                    <option value="active">Aktivní</option>
+                                    <option value="completed">Dokončené</option>
+                                    <option value="cancelled">Zrušené</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-outline-secondary" onclick="TableManager.clearFilters()">
+                                    <i class="fas fa-times me-1"></i>Vymazat filtry
+                                </button>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <button class="btn btn-outline-primary" onclick="TableManager.exportToCSV()">
+                                    <i class="fas fa-download me-1"></i>Export CSV
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="card">
                         <div class="card-body">
                             <div class="table-responsive">
-                                <table class="table" id="projectsTable">
+                                <table class="table">
                                     <thead>
                                         <tr>
-                                            <th>Projekt</th>
-                                            <th>Klient</th>
-                                            <th>Stav</th>
-                                            <th>Progress</th>
-                                            <th>Deadline</th>
+                                            <th class="sortable" data-sort="name">Projekt</th>
+                                            <th class="sortable" data-sort="client">Klient</th>
+                                            <th class="sortable" data-sort="status">Stav</th>
+                                            <th class="sortable" data-sort="progress">Progress</th>
+                                            <th class="sortable" data-sort="end_date">Deadline</th>
                                             <th>Akce</th>
                                         </tr>
                                     </thead>
@@ -356,6 +416,7 @@
                                     </tbody>
                                 </table>
                             </div>
+                            <div class="pagination-container mt-3"></div>
                         </div>
                     </div>
                 </div>
@@ -363,11 +424,145 @@
                 <!-- Finance Page -->
                 <div id="financePage" class="page-content" style="display: none;">
                     <div class="page-header">
-                        <h1 class="page-title">Finance</h1>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h1 class="page-title">Finance</h1>
+                                <nav aria-label="breadcrumb">
+                                    <ol class="breadcrumb">
+                                        <li class="breadcrumb-item"><a href="#dashboard">Dashboard</a></li>
+                                        <li class="breadcrumb-item active">Finance</li>
+                                    </ol>
+                                </nav>
+                            </div>
+                            <div>
+                                <button class="btn btn-success me-2" onclick="showAddTransactionModal('income')">
+                                    <i class="fas fa-plus me-2"></i>Přidat příjem
+                                </button>
+                                <button class="btn btn-danger" onclick="showAddTransactionModal('expense')">
+                                    <i class="fas fa-plus me-2"></i>Přidat výdaj
+                                </button>
+                            </div>
+                        </div>
                     </div>
+
+                    <!-- Finance Stats -->
+                    <div class="row mb-4">
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card bg-success text-white">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Celkové příjmy</h6>
+                                            <h4 id="totalIncome">0,00 Kč</h4>
+                                        </div>
+                                        <i class="fas fa-arrow-up fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card bg-danger text-white">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Celkové výdaje</h6>
+                                            <h4 id="totalExpenses">0,00 Kč</h4>
+                                        </div>
+                                        <i class="fas fa-arrow-down fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card bg-primary text-white">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Zisk/Ztráta</h6>
+                                            <h4 id="netProfit">0,00 Kč</h4>
+                                        </div>
+                                        <i class="fas fa-chart-line fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card bg-warning text-white">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title">Tento měsíc</h6>
+                                            <h4 id="monthlyBalance">0,00 Kč</h4>
+                                        </div>
+                                        <i class="fas fa-calendar fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filter Bar -->
+                    <div class="filter-bar">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="search-box">
+                                    <input type="text" class="form-control table-search" placeholder="Hledat transakce...">
+                                    <i class="fas fa-search search-icon"></i>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-select table-filter" name="type">
+                                    <option value="">Všechny typy</option>
+                                    <option value="income">Příjmy</option>
+                                    <option value="expense">Výdaje</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-select table-filter" name="category">
+                                    <option value="">Všechny kategorie</option>
+                                    <option value="material">Materiál</option>
+                                    <option value="labor">Práce</option>
+                                    <option value="tools">Nářadí</option>
+                                    <option value="fuel">Pohonné hmoty</option>
+                                    <option value="office">Kancelář</option>
+                                    <option value="other">Ostatní</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <button class="btn btn-outline-secondary me-2" onclick="TableManager.clearFilters()">
+                                    <i class="fas fa-times me-1"></i>Vymazat filtry
+                                </button>
+                                <button class="btn btn-outline-primary" onclick="TableManager.exportToCSV()">
+                                    <i class="fas fa-download me-1"></i>Export CSV
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="card">
                         <div class="card-body">
-                            <p>Finance stránka - v implementaci...</p>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-sort="type">Typ</th>
+                                            <th class="sortable" data-sort="description">Popis</th>
+                                            <th class="sortable" data-sort="total_amount">Částka</th>
+                                            <th class="sortable" data-sort="category">Kategorie</th>
+                                            <th class="sortable" data-sort="transaction_date">Datum</th>
+                                            <th>Akce</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="transactionsTableBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                Načítání transakcí...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="pagination-container mt-3"></div>
                         </div>
                     </div>
                 </div>
@@ -375,11 +570,133 @@
                 <!-- Invoices Page -->
                 <div id="invoicesPage" class="page-content" style="display: none;">
                     <div class="page-header">
-                        <h1 class="page-title">Faktury</h1>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h1 class="page-title">Faktury</h1>
+                                <nav aria-label="breadcrumb">
+                                    <ol class="breadcrumb">
+                                        <li class="breadcrumb-item"><a href="#dashboard">Dashboard</a></li>
+                                        <li class="breadcrumb-item active">Faktury</li>
+                                    </ol>
+                                </nav>
+                            </div>
+                            <button class="btn btn-primary" onclick="showAddInvoiceModal()">
+                                <i class="fas fa-plus me-2"></i>Vystavit fakturu
+                            </button>
+                        </div>
                     </div>
+
+                    <!-- Invoice Stats -->
+                    <div class="row mb-4">
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">Celkový obrat</h6>
+                                            <h4 id="totalInvoiceAmount">0,00 Kč</h4>
+                                        </div>
+                                        <i class="fas fa-file-invoice text-primary fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">Čekající faktury</h6>
+                                            <h4 id="pendingInvoices">0</h4>
+                                        </div>
+                                        <i class="fas fa-clock text-warning fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">Zaplacené faktury</h6>
+                                            <h4 id="paidInvoices">0</h4>
+                                        </div>
+                                        <i class="fas fa-check-circle text-success fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">Po splatnosti</h6>
+                                            <h4 id="overdueInvoices">0</h4>
+                                        </div>
+                                        <i class="fas fa-exclamation-triangle text-danger fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filter Bar -->
+                    <div class="filter-bar">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="search-box">
+                                    <input type="text" class="form-control table-search" placeholder="Hledat faktury...">
+                                    <i class="fas fa-search search-icon"></i>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-select table-filter" name="status">
+                                    <option value="">Všechny stavy</option>
+                                    <option value="pending">Čekající</option>
+                                    <option value="paid">Zaplacené</option>
+                                    <option value="overdue">Po splatnosti</option>
+                                    <option value="cancelled">Zrušené</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-outline-secondary" onclick="TableManager.clearFilters()">
+                                    <i class="fas fa-times me-1"></i>Vymazat filtry
+                                </button>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <button class="btn btn-outline-primary" onclick="TableManager.exportToCSV()">
+                                    <i class="fas fa-download me-1"></i>Export CSV
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="card">
                         <div class="card-body">
-                            <p>Faktury stránka - v implementaci...</p>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-sort="invoice_number">Číslo faktury</th>
+                                            <th class="sortable" data-sort="client_name">Klient</th>
+                                            <th class="sortable" data-sort="total_amount">Částka</th>
+                                            <th class="sortable" data-sort="status">Stav</th>
+                                            <th class="sortable" data-sort="due_date">Splatnost</th>
+                                            <th>Akce</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="invoicesTableBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                Načítání faktur...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="pagination-container mt-3"></div>
                         </div>
                     </div>
                 </div>
@@ -387,11 +704,139 @@
                 <!-- Employees Page -->
                 <div id="employeesPage" class="page-content" style="display: none;">
                     <div class="page-header">
-                        <h1 class="page-title">Zaměstnanci</h1>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h1 class="page-title">Zaměstnanci</h1>
+                                <nav aria-label="breadcrumb">
+                                    <ol class="breadcrumb">
+                                        <li class="breadcrumb-item"><a href="#dashboard">Dashboard</a></li>
+                                        <li class="breadcrumb-item active">Zaměstnanci</li>
+                                    </ol>
+                                </nav>
+                            </div>
+                            <button class="btn btn-primary" onclick="showAddEmployeeModal()">
+                                <i class="fas fa-plus me-2"></i>Přidat zaměstnance
+                            </button>
+                        </div>
                     </div>
+
+                    <!-- Employee Stats -->
+                    <div class="row mb-4">
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">Celkem zaměstnanců</h6>
+                                            <h4 id="totalEmployees">0</h4>
+                                        </div>
+                                        <i class="fas fa-users text-primary fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">Aktivní</h6>
+                                            <h4 id="activeEmployees">0</h4>
+                                        </div>
+                                        <i class="fas fa-user-check text-success fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">Dnes na stavbě</h6>
+                                            <h4 id="todayPresent">0</h4>
+                                        </div>
+                                        <i class="fas fa-hard-hat text-warning fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">Průměrná mzda</h6>
+                                            <h4 id="averageSalary">0,00 Kč</h4>
+                                        </div>
+                                        <i class="fas fa-money-bill text-info fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filter Bar -->
+                    <div class="filter-bar">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="search-box">
+                                    <input type="text" class="form-control table-search" placeholder="Hledat zaměstnance...">
+                                    <i class="fas fa-search search-icon"></i>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-select table-filter" name="status">
+                                    <option value="">Všechny stavy</option>
+                                    <option value="active">Aktivní</option>
+                                    <option value="inactive">Neaktivní</option>
+                                    <option value="terminated">Ukončeno</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-select table-filter" name="position">
+                                    <option value="">Všechny pozice</option>
+                                    <option value="stavař">Stavař</option>
+                                    <option value="zedník">Zedník</option>
+                                    <option value="elektrikář">Elektrikář</option>
+                                    <option value="instalatér">Instalatér</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <button class="btn btn-outline-secondary me-2" onclick="TableManager.clearFilters()">
+                                    <i class="fas fa-times me-1"></i>Vymazat filtry
+                                </button>
+                                <button class="btn btn-outline-primary" onclick="TableManager.exportToCSV()">
+                                    <i class="fas fa-download me-1"></i>Export CSV
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="card">
                         <div class="card-body">
-                            <p>Zaměstnanci stránka - v implementaci...</p>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-sort="first_name">Jméno</th>
+                                            <th class="sortable" data-sort="phone">Kontakt</th>
+                                            <th class="sortable" data-sort="status">Stav</th>
+                                            <th class="sortable" data-sort="start_date">Nastoupil</th>
+                                            <th class="sortable" data-sort="hourly_rate">Mzda</th>
+                                            <th>Akce</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="employeesTableBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                Načítání zaměstnanců...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="pagination-container mt-3"></div>
                         </div>
                     </div>
                 </div>
@@ -399,11 +844,142 @@
                 <!-- Equipment Page -->
                 <div id="equipmentPage" class="page-content" style="display: none;">
                     <div class="page-header">
-                        <h1 class="page-title">Nářadí</h1>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h1 class="page-title">Nářadí a technika</h1>
+                                <nav aria-label="breadcrumb">
+                                    <ol class="breadcrumb">
+                                        <li class="breadcrumb-item"><a href="#dashboard">Dashboard</a></li>
+                                        <li class="breadcrumb-item active">Nářadí</li>
+                                    </ol>
+                                </nav>
+                            </div>
+                            <button class="btn btn-primary" onclick="showAddEquipmentModal()">
+                                <i class="fas fa-plus me-2"></i>Přidat nářadí
+                            </button>
+                        </div>
                     </div>
+
+                    <!-- Equipment Stats -->
+                    <div class="row mb-4">
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">Celkem nářadí</h6>
+                                            <h4 id="totalEquipment">0</h4>
+                                        </div>
+                                        <i class="fas fa-tools text-primary fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">K dispozici</h6>
+                                            <h4 id="availableEquipment">0</h4>
+                                        </div>
+                                        <i class="fas fa-check-circle text-success fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">Vypůjčeno</h6>
+                                            <h4 id="borrowedEquipment">0</h4>
+                                        </div>
+                                        <i class="fas fa-hand-paper text-warning fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">V servisu</h6>
+                                            <h4 id="serviceEquipment">0</h4>
+                                        </div>
+                                        <i class="fas fa-wrench text-danger fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filter Bar -->
+                    <div class="filter-bar">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="search-box">
+                                    <input type="text" class="form-control table-search" placeholder="Hledat nářadí...">
+                                    <i class="fas fa-search search-icon"></i>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-select table-filter" name="status">
+                                    <option value="">Všechny stavy</option>
+                                    <option value="available">K dispozici</option>
+                                    <option value="borrowed">Vypůjčeno</option>
+                                    <option value="service">V servisu</option>
+                                    <option value="retired">Vyřazeno</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-select table-filter" name="category">
+                                    <option value="">Všechny kategorie</option>
+                                    <option value="hand_tools">Ruční nářadí</option>
+                                    <option value="power_tools">Elektrické nářadí</option>
+                                    <option value="machinery">Strojní technika</option>
+                                    <option value="measuring">Měřicí přístroje</option>
+                                    <option value="vehicles">Dopravní prostředky</option>
+                                    <option value="safety">Ochranné pomůcky</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <button class="btn btn-outline-secondary me-2" onclick="TableManager.clearFilters()">
+                                    <i class="fas fa-times me-1"></i>Vymazat filtry
+                                </button>
+                                <button class="btn btn-outline-primary" onclick="TableManager.exportToCSV()">
+                                    <i class="fas fa-download me-1"></i>Export CSV
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="card">
                         <div class="card-body">
-                            <p>Nářadí stránka - v implementaci...</p>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-sort="name">Název</th>
+                                            <th class="sortable" data-sort="manufacturer">Výrobce/Model</th>
+                                            <th class="sortable" data-sort="category">Kategorie</th>
+                                            <th class="sortable" data-sort="status">Stav</th>
+                                            <th class="sortable" data-sort="location">Umístění</th>
+                                            <th>Akce</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="equipmentTableBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                Načítání nářadí...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="pagination-container mt-3"></div>
                         </div>
                     </div>
                 </div>
@@ -411,11 +987,136 @@
                 <!-- Materials Page -->
                 <div id="materialsPage" class="page-content" style="display: none;">
                     <div class="page-header">
-                        <h1 class="page-title">Materiál</h1>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h1 class="page-title">Materiál a sklad</h1>
+                                <nav aria-label="breadcrumb">
+                                    <ol class="breadcrumb">
+                                        <li class="breadcrumb-item"><a href="#dashboard">Dashboard</a></li>
+                                        <li class="breadcrumb-item active">Materiál</li>
+                                    </ol>
+                                </nav>
+                            </div>
+                            <button class="btn btn-primary" onclick="showAddMaterialModal()">
+                                <i class="fas fa-plus me-2"></i>Přidat materiál
+                            </button>
+                        </div>
                     </div>
+
+                    <!-- Material Stats -->
+                    <div class="row mb-4">
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">Celkem materiálů</h6>
+                                            <h4 id="totalMaterials">0</h4>
+                                        </div>
+                                        <i class="fas fa-boxes text-primary fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">Na skladě</h6>
+                                            <h4 id="inStockMaterials">0</h4>
+                                        </div>
+                                        <i class="fas fa-warehouse text-success fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">Nízký stav</h6>
+                                            <h4 id="lowStockMaterials">0</h4>
+                                        </div>
+                                        <i class="fas fa-exclamation-triangle text-warning fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <h6 class="card-title text-muted">Hodnota skladu</h6>
+                                            <h4 id="stockValue">0,00 Kč</h4>
+                                        </div>
+                                        <i class="fas fa-money-bill text-info fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filter Bar -->
+                    <div class="filter-bar">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="search-box">
+                                    <input type="text" class="form-control table-search" placeholder="Hledat materiál...">
+                                    <i class="fas fa-search search-icon"></i>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-select table-filter" name="category">
+                                    <option value="">Všechny kategorie</option>
+                                    <option value="construction">Stavební materiál</option>
+                                    <option value="wood">Dřevo a desky</option>
+                                    <option value="fasteners">Spojovací materiál</option>
+                                    <option value="electrical">Elektroinstalace</option>
+                                    <option value="plumbing">Voda a topení</option>
+                                    <option value="finishing">Dokončovací práce</option>
+                                    <option value="insulation">Izolace</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-outline-secondary" onclick="TableManager.clearFilters()">
+                                    <i class="fas fa-times me-1"></i>Vymazat filtry
+                                </button>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <button class="btn btn-outline-primary" onclick="TableManager.exportToCSV()">
+                                    <i class="fas fa-download me-1"></i>Export CSV
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="card">
                         <div class="card-body">
-                            <p>Materiál stránka - v implementaci...</p>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-sort="name">Název</th>
+                                            <th class="sortable" data-sort="category">Kategorie</th>
+                                            <th class="sortable" data-sort="unit">Jednotka</th>
+                                            <th class="sortable" data-sort="preferred_supplier">Dodavatel</th>
+                                            <th>Stav</th>
+                                            <th>Akce</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="materialsTableBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                Načítání materiálů...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="pagination-container mt-3"></div>
                         </div>
                     </div>
                 </div>
@@ -423,11 +1124,99 @@
                 <!-- Reports Page -->
                 <div id="reportsPage" class="page-content" style="display: none;">
                     <div class="page-header">
-                        <h1 class="page-title">Reporty</h1>
+                        <h1 class="page-title">Reporty a analýzy</h1>
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb">
+                                <li class="breadcrumb-item"><a href="#dashboard">Dashboard</a></li>
+                                <li class="breadcrumb-item active">Reporty</li>
+                            </ol>
+                        </nav>
                     </div>
+
+                    <!-- Report Categories -->
+                    <div class="row mb-4">
+                        <div class="col-lg-4 col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-chart-line fa-3x text-primary mb-3"></i>
+                                    <h5 class="card-title">Finanční reporty</h5>
+                                    <p class="card-text">Přehledy příjmů, výdajů, ziskovosti a cash flow</p>
+                                    <button class="btn btn-primary" onclick="generateFinancialReport()">
+                                        <i class="fas fa-file-alt me-2"></i>Generovat
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4 col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-building fa-3x text-success mb-3"></i>
+                                    <h5 class="card-title">Projektové reporty</h5>
+                                    <p class="card-text">Analýzy projektů, termínů a výkonnosti</p>
+                                    <button class="btn btn-success" onclick="generateProjectReport()">
+                                        <i class="fas fa-file-alt me-2"></i>Generovat
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4 col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-users fa-3x text-warning mb-3"></i>
+                                    <h5 class="card-title">HR reporty</h5>
+                                    <p class="card-text">Docházka, mzdy a výkonnost zaměstnanců</p>
+                                    <button class="btn btn-warning" onclick="generateHRReport()">
+                                        <i class="fas fa-file-alt me-2"></i>Generovat
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Stats -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">Rychlé statistiky</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-3 text-center">
+                                            <h4 class="text-primary" id="reportTotalProjects">0</h4>
+                                            <small class="text-muted">Celkem projektů</small>
+                                        </div>
+                                        <div class="col-md-3 text-center">
+                                            <h4 class="text-success" id="reportTotalRevenue">0,00 Kč</h4>
+                                            <small class="text-muted">Celkový obrat</small>
+                                        </div>
+                                        <div class="col-md-3 text-center">
+                                            <h4 class="text-warning" id="reportTotalEmployees">0</h4>
+                                            <small class="text-muted">Zaměstnanců</small>
+                                        </div>
+                                        <div class="col-md-3 text-center">
+                                            <h4 class="text-info" id="reportAvgProjectDuration">0</h4>
+                                            <small class="text-muted">Průměrná délka projektu (dny)</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Reports -->
                     <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">Nedávno generované reporty</h5>
+                        </div>
                         <div class="card-body">
-                            <p>Reporty stránka - v implementaci...</p>
+                            <div id="recentReportsList">
+                                <div class="text-center text-muted py-4">
+                                    <i class="fas fa-chart-bar fa-3x mb-3 opacity-50"></i>
+                                    <p>Zatím žádné reporty</p>
+                                    <small>Vygenerujte první report pomocí tlačítek výše</small>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -436,10 +1225,428 @@
                 <div id="settingsPage" class="page-content" style="display: none;">
                     <div class="page-header">
                         <h1 class="page-title">Nastavení</h1>
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb">
+                                <li class="breadcrumb-item"><a href="#dashboard">Dashboard</a></li>
+                                <li class="breadcrumb-item active">Nastavení</li>
+                            </ol>
+                        </nav>
                     </div>
-                    <div class="card">
-                        <div class="card-body">
-                            <p>Nastavení stránka - v implementaci...</p>
+
+                    <div class="row">
+                        <!-- Settings Navigation -->
+                        <div class="col-lg-3 mb-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <nav class="nav flex-column nav-pills">
+                                        <a class="nav-link active" data-tab="company" onclick="showSettingsTab('company')">
+                                            <i class="fas fa-building me-2"></i>Firma
+                                        </a>
+                                        <a class="nav-link" data-tab="users" onclick="showSettingsTab('users')">
+                                            <i class="fas fa-users me-2"></i>Uživatelé
+                                        </a>
+                                        <a class="nav-link" data-tab="finance" onclick="showSettingsTab('finance')">
+                                            <i class="fas fa-coins me-2"></i>Finance
+                                        </a>
+                                        <a class="nav-link" data-tab="notifications" onclick="showSettingsTab('notifications')">
+                                            <i class="fas fa-bell me-2"></i>Notifikace
+                                        </a>
+                                        <a class="nav-link" data-tab="backup" onclick="showSettingsTab('backup')">
+                                            <i class="fas fa-database me-2"></i>Zálohování
+                                        </a>
+                                        <a class="nav-link" data-tab="system" onclick="showSettingsTab('system')">
+                                            <i class="fas fa-cog me-2"></i>Systém
+                                        </a>
+                                    </nav>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Settings Content -->
+                        <div class="col-lg-9">
+                            <!-- Company Settings -->
+                            <div id="companySettings" class="settings-tab active">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5 class="mb-0">Údaje o firmě</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <form id="companySettingsForm">
+                                            <div class="row">
+                                                <div class="col-md-6 mb-3">
+                                                    <label class="form-label">Název firmy</label>
+                                                    <input type="text" class="form-control" id="companyName" value="AstraCore Solutions">
+                                                </div>
+                                                <div class="col-md-6 mb-3">
+                                                    <label class="form-label">IČO</label>
+                                                    <input type="text" class="form-control" id="companyICO" placeholder="12345678">
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6 mb-3">
+                                                    <label class="form-label">DIČ</label>
+                                                    <input type="text" class="form-control" id="companyDIC" placeholder="CZ12345678">
+                                                </div>
+                                                <div class="col-md-6 mb-3">
+                                                    <label class="form-label">Telefon</label>
+                                                    <input type="tel" class="form-control" id="companyPhone">
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Adresa</label>
+                                                <textarea class="form-control" id="companyAddress" rows="3"></textarea>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6 mb-3">
+                                                    <label class="form-label">Email</label>
+                                                    <input type="email" class="form-control" id="companyEmail">
+                                                </div>
+                                                <div class="col-md-6 mb-3">
+                                                    <label class="form-label">Webové stránky</label>
+                                                    <input type="url" class="form-control" id="companyWebsite">
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Bankovní účet</label>
+                                                <input type="text" class="form-control" id="companyBankAccount" placeholder="123456789/0100">
+                                            </div>
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="fas fa-save me-2"></i>Uložit změny
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Users Settings -->
+                            <div id="usersSettings" class="settings-tab" style="display: none;">
+                                <div class="card">
+                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                        <h5 class="mb-0">Správa uživatelů</h5>
+                                        <button class="btn btn-primary btn-sm" onclick="inviteUser()">
+                                            <i class="fas fa-plus me-1"></i>Pozvat uživatele
+                                        </button>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="table-responsive">
+                                            <table class="table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Uživatel</th>
+                                                        <th>Role</th>
+                                                        <th>Poslední přihlášení</th>
+                                                        <th>Stav</th>
+                                                        <th>Akce</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="usersTableBody">
+                                                    <tr>
+                                                        <td>
+                                                            <div class="d-flex align-items-center">
+                                                                <div class="user-avatar me-2">A</div>
+                                                                <div>
+                                                                    <div class="fw-semibold">Admin User</div>
+                                                                    <small class="text-muted">admin@astracore.cz</small>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td><span class="badge bg-danger">Admin</span></td>
+                                                        <td>Právě teď</td>
+                                                        <td><span class="badge bg-success">Aktivní</span></td>
+                                                        <td>
+                                                            <button class="btn btn-sm btn-outline-primary" disabled>
+                                                                <i class="fas fa-edit"></i>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Finance Settings -->
+                            <div id="financeSettings" class="settings-tab" style="display: none;">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5 class="mb-0">Finanční nastavení</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <form id="financeSettingsForm">
+                                            <div class="row">
+                                                <div class="col-md-6 mb-3">
+                                                    <label class="form-label">Výchozí sazba DPH (%)</label>
+                                                    <select class="form-select" id="defaultVATRate">
+                                                        <option value="21" selected>21%</option>
+                                                        <option value="12">12%</option>
+                                                        <option value="0">0%</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-6 mb-3">
+                                                    <label class="form-label">Měna</label>
+                                                    <select class="form-select" id="defaultCurrency">
+                                                        <option value="CZK" selected>CZK - Česká koruna</option>
+                                                        <option value="EUR">EUR - Euro</option>
+                                                        <option value="USD">USD - Americký dolar</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6 mb-3">
+                                                    <label class="form-label">Výchozí splatnost faktur (dny)</label>
+                                                    <input type="number" class="form-control" id="defaultDueDays" value="14" min="1" max="365">
+                                                </div>
+                                                <div class="col-md-6 mb-3">
+                                                    <label class="form-label">Automatické číslování faktur</label>
+                                                    <select class="form-select" id="invoiceNumbering">
+                                                        <option value="yearly" selected>Ročně (2025-0001)</option>
+                                                        <option value="continuous">Průběžně (0001)</option>
+                                                        <option value="monthly">Měsíčně (2025-01-0001)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="enableTaxCalculation" checked>
+                                                    <label class="form-check-label" for="enableTaxCalculation">
+                                                        Automatický výpočet DPH
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="fas fa-save me-2"></i>Uložit změny
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Notifications Settings -->
+                            <div id="notificationsSettings" class="settings-tab" style="display: none;">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5 class="mb-0">Nastavení notifikací</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <form id="notificationsSettingsForm">
+                                            <h6 class="mb-3">Emailové notifikace</h6>
+                                            <div class="mb-3">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="emailNewInvoice" checked>
+                                                    <label class="form-check-label" for="emailNewInvoice">
+                                                        Nová faktura byla vystavena
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="emailOverdueInvoice" checked>
+                                                    <label class="form-check-label" for="emailOverdueInvoice">
+                                                        Faktura je po splatnosti
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="emailProjectDeadline" checked>
+                                                    <label class="form-check-label" for="emailProjectDeadline">
+                                                        Blíží se deadline projektu
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            
+                                            <h6 class="mb-3 mt-4">Push notifikace</h6>
+                                            <div class="mb-3">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="pushEnabled" checked>
+                                                    <label class="form-check-label" for="pushEnabled">
+                                                        Povolit push notifikace
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            
+                                            <h6 class="mb-3 mt-4">Frekvence souhrnu</h6>
+                                            <div class="mb-3">
+                                                <select class="form-select" id="summaryFrequency">
+                                                    <option value="daily">Denně</option>
+                                                    <option value="weekly" selected>Týdně</option>
+                                                    <option value="monthly">Měsíčně</option>
+                                                    <option value="never">Nikdy</option>
+                                                </select>
+                                            </div>
+                                            
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="fas fa-save me-2"></i>Uložit změny
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Backup Settings -->
+                            <div id="backupSettings" class="settings-tab" style="display: none;">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5 class="mb-0">Zálohování dat</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6 mb-4">
+                                                <h6>Automatické zálohování</h6>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="checkbox" id="autoBackupEnabled" checked>
+                                                    <label class="form-check-label" for="autoBackupEnabled">
+                                                        Povolit automatické zálohování
+                                                    </label>
+                                                </div>
+                                                <select class="form-select mb-3" id="backupFrequency">
+                                                    <option value="daily" selected>Denně</option>
+                                                    <option value="weekly">Týdně</option>
+                                                    <option value="monthly">Měsíčně</option>
+                                                </select>
+                                                <small class="text-muted">Poslední záloha: Dnes v 03:00</small>
+                                            </div>
+                                            <div class="col-md-6 mb-4">
+                                                <h6>Manuální záloha</h6>
+                                                <p class="text-muted">Vytvořte zálohu všech dat hned teď</p>
+                                                <button class="btn btn-outline-primary" onclick="createBackup()">
+                                                    <i class="fas fa-download me-2"></i>Vytvořit zálohu
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <hr>
+                                        
+                                        <h6>Historie záloh</h6>
+                                        <div class="table-responsive">
+                                            <table class="table table-sm">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Datum</th>
+                                                        <th>Typ</th>
+                                                        <th>Velikost</th>
+                                                        <th>Akce</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr>
+                                                        <td>01.06.2025 03:00</td>
+                                                        <td><span class="badge bg-info">Auto</span></td>
+                                                        <td>2.3 MB</td>
+                                                        <td>
+                                                            <button class="btn btn-sm btn-outline-primary">
+                                                                <i class="fas fa-download"></i>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td>31.05.2025 03:00</td>
+                                                        <td><span class="badge bg-info">Auto</span></td>
+                                                        <td>2.1 MB</td>
+                                                        <td>
+                                                            <button class="btn btn-sm btn-outline-primary">
+                                                                <i class="fas fa-download"></i>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- System Settings -->
+                            <div id="systemSettings" class="settings-tab" style="display: none;">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5 class="mb-0">Systémové nastavení</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6 mb-4">
+                                                <h6>Vzhled</h6>
+                                                <div class="mb-3">
+                                                    <label class="form-label">Motiv</label>
+                                                    <select class="form-select" id="appTheme">
+                                                        <option value="light" selected>Světlý</option>
+                                                        <option value="dark">Tmavý</option>
+                                                        <option value="auto">Automatický</option>
+                                                    </select>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">Jazyk</label>
+                                                    <select class="form-select" id="appLanguage">
+                                                        <option value="cs" selected>Čeština</option>
+                                                        <option value="en">English</option>
+                                                        <option value="sk">Slovenčina</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6 mb-4">
+                                                <h6>Výkon</h6>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="checkbox" id="enableAnimations" checked>
+                                                    <label class="form-check-label" for="enableAnimations">
+                                                        Povolit animace
+                                                    </label>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="checkbox" id="enableNotifications" checked>
+                                                    <label class="form-check-label" for="enableNotifications">
+                                                        Povolit notifikace
+                                                    </label>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="checkbox" id="enableAutoSave" checked>
+                                                    <label class="form-check-label" for="enableAutoSave">
+                                                        Automatické ukládání
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <hr>
+                                        
+                                        <h6>Systémové informace</h6>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <dl class="row">
+                                                    <dt class="col-sm-6">Verze aplikace:</dt>
+                                                    <dd class="col-sm-6">1.0.0</dd>
+                                                    <dt class="col-sm-6">Databáze:</dt>
+                                                    <dd class="col-sm-6">Supabase</dd>
+                                                    <dt class="col-sm-6">Prostředí:</dt>
+                                                    <dd class="col-sm-6">Development</dd>
+                                                </dl>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <dl class="row">
+                                                    <dt class="col-sm-6">Poslední aktualizace:</dt>
+                                                    <dd class="col-sm-6">01.06.2025</dd>
+                                                    <dt class="col-sm-6">Využití úložiště:</dt>
+                                                    <dd class="col-sm-6">12.3 MB</dd>
+                                                    <dt class="col-sm-6">Status:</dt>
+                                                    <dd class="col-sm-6"><span class="badge bg-success">Online</span></dd>
+                                                </dl>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mt-4">
+                                            <button class="btn btn-outline-info me-2" onclick="exportSystemInfo()">
+                                                <i class="fas fa-info-circle me-2"></i>Export systémových informací
+                                            </button>
+                                            <button class="btn btn-outline-warning me-2" onclick="clearCache()">
+                                                <i class="fas fa-trash me-2"></i>Vymazat cache
+                                            </button>
+                                            <button class="btn btn-outline-danger" onclick="resetApp()">
+                                                <i class="fas fa-redo me-2"></i>Resetovat aplikaci
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -460,6 +1667,104 @@
     <script src="js/dashboard.js"></script>
     <script src="js/database.js"></script>
     <script src="js/modals.js"></script>
+    <script src="js/tables.js"></script>
+    <script src="js/app.js"></script>
+    
+    <!-- Settings Functions -->
+    <script>
+        // Settings Tab Management
+        function showSettingsTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.settings-tab').forEach(tab => {
+                tab.style.display = 'none';
+            });
+            
+            // Remove active class from all nav links
+            document.querySelectorAll('.nav-pills .nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            
+            // Show selected tab
+            const selectedTab = document.getElementById(tabName + 'Settings');
+            if (selectedTab) {
+                selectedTab.style.display = 'block';
+            }
+            
+            // Add active class to clicked nav link
+            const selectedNav = document.querySelector(`[data-tab="${tabName}"]`);
+            if (selectedNav) {
+                selectedNav.classList.add('active');
+            }
+        }
+
+        // Report Functions
+        function generateFinancialReport() {
+            Utils.Debug.log('Generating financial report...');
+            if (window.ModalManager) {
+                window.ModalManager.showNotification('Finanční report je generován...', 'info');
+            }
+        }
+
+        function generateProjectReport() {
+            Utils.Debug.log('Generating project report...');
+            if (window.ModalManager) {
+                window.ModalManager.showNotification('Projektový report je generován...', 'info');
+            }
+        }
+
+        function generateHRReport() {
+            Utils.Debug.log('Generating HR report...');
+            if (window.ModalManager) {
+                window.ModalManager.showNotification('HR report je generován...', 'info');
+            }
+        }
+
+        // Settings Functions
+        function inviteUser() {
+            Utils.Debug.log('Inviting user...');
+            if (window.ModalManager) {
+                window.ModalManager.showNotification('Funkce pozvání uživatele bude brzy dostupná', 'info');
+            }
+        }
+
+        function createBackup() {
+            Utils.Debug.log('Creating backup...');
+            if (window.ModalManager) {
+                window.ModalManager.showNotification('Záloha je vytvářena...', 'info');
+            }
+        }
+
+        function clearCache() {
+            if (confirm('Opravdu chcete vymazat cache? Aplikace se restartuje.')) {
+                if (window.appState.cache) {
+                    window.appState.cache.clear();
+                }
+                Utils.Storage.clear();
+                location.reload();
+            }
+        }
+
+        function resetApp() {
+            if (confirm('Opravdu chcete resetovat aplikaci? Všechna lokální data budou ztracena!')) {
+                if (window.AppManager) {
+                    window.AppManager.cleanup();
+                }
+                Utils.Storage.clear();
+                location.reload();
+            }
+        }
+
+        // Initialize tooltips when document is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize all tooltips
+            const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+            tooltipTriggerList.forEach(tooltipTriggerEl => {
+                if (bootstrap && bootstrap.Tooltip) {
+                    new bootstrap.Tooltip(tooltipTriggerEl);
+                }
+            });
+        });
+    </script>
     
     <!-- App Initialization -->
     <script>
