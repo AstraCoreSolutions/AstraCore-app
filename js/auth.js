@@ -4,6 +4,7 @@ class AuthManager {
     constructor() {
         this.currentUser = null;
         this.isAuthenticated = false;
+        this.authListenerSetup = false; // Přidáno pro kontrolu
         this.setupEventListeners();
     }
 
@@ -14,7 +15,7 @@ class AuthManager {
         Utils.Debug.log('Initializing authentication...');
         
         try {
-            // Check if user is already authenticated
+            // Kontrola současné session pouze jednou
             const { data: { session }, error } = await window.supabaseClient.auth.getSession();
             
             if (error) {
@@ -23,6 +24,7 @@ class AuthManager {
                 return;
             }
 
+            // Nastavit stav na základě session
             if (session && session.user) {
                 Utils.Debug.log('Found existing session for user:', session.user.email);
                 this.currentUser = session.user;
@@ -34,6 +36,10 @@ class AuthManager {
                 Utils.Debug.log('No existing session found');
                 this.showLogin();
             }
+
+            // Nastavit listener až POTÉ, co jsme zpracovali initial session
+            this.setupAuthListener();
+            
         } catch (error) {
             Utils.Debug.error('Auth initialization error:', error);
             this.showLogin();
@@ -41,35 +47,26 @@ class AuthManager {
     }
 
     /**
-     * Setup event listeners for forms and auth state changes
+     * Samostatná metoda pro nastavení auth listeneru
      */
-    setupEventListeners() {
-        // Login form
-        const signInForm = document.getElementById('signInForm');
-        if (signInForm) {
-            signInForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.signIn();
-            });
-        }
-
-        // Register form
-        const signUpForm = document.getElementById('signUpForm');
-        if (signUpForm) {
-            signUpForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.signUp();
-            });
-        }
-
-        // Auth state change listener
-        if (window.supabaseClient) {
+    setupAuthListener() {
+        if (window.supabaseClient && !this.authListenerSetup) {
+            this.authListenerSetup = true;
+            
             window.supabaseClient.auth.onAuthStateChange(async (event, session) => {
                 Utils.Debug.log('Auth state changed:', event, session?.user?.email);
                 
+                // Ignorovat INITIAL_SESSION event - už jsme ho zpracovali
+                if (event === 'INITIAL_SESSION') {
+                    Utils.Debug.log('Ignoring INITIAL_SESSION event');
+                    return;
+                }
+                
                 switch (event) {
                     case 'SIGNED_IN':
-                        if (session?.user) {
+                        if (session?.user && !this.isAuthenticated) {
+                            // Pouze pokud ještě nejsme přihlášeni
+                            Utils.Debug.log('Processing SIGNED_IN event');
                             this.currentUser = session.user;
                             this.isAuthenticated = true;
                             window.appState.currentUser = session.user;
@@ -79,15 +76,20 @@ class AuthManager {
                         break;
                         
                     case 'SIGNED_OUT':
-                        this.currentUser = null;
-                        this.isAuthenticated = false;
-                        window.appState.currentUser = null;
-                        window.appState.isAuthenticated = false;
-                        this.showLogin();
+                        if (this.isAuthenticated) {
+                            // Pouze pokud jsme byli přihlášeni
+                            Utils.Debug.log('Processing SIGNED_OUT event');
+                            this.currentUser = null;
+                            this.isAuthenticated = false;
+                            window.appState.currentUser = null;
+                            window.appState.isAuthenticated = false;
+                            this.showLogin();
+                        }
                         break;
                         
                     case 'TOKEN_REFRESHED':
                         Utils.Debug.log('Token refreshed');
+                        // Neděláme nic, jen logujeme
                         break;
                         
                     default:
@@ -95,6 +97,31 @@ class AuthManager {
                 }
             });
         }
+    }
+
+    /**
+     * Setup event listeners for forms and auth state changes
+     */
+    setupEventListeners() {
+        // Login form
+        document.addEventListener('DOMContentLoaded', () => {
+            const signInForm = document.getElementById('signInForm');
+            if (signInForm) {
+                signInForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.signIn();
+                });
+            }
+
+            // Register form
+            const signUpForm = document.getElementById('signUpForm');
+            if (signUpForm) {
+                signUpForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.signUp();
+                });
+            }
+        });
     }
 
     /**
@@ -300,9 +327,21 @@ class AuthManager {
             // Update user info in UI
             this.updateUserInfo();
             
-            // Initialize app data and UI
-            if (window.AppManager) {
-                await window.AppManager.initialize();
+            // POUZE pokud ještě není inicializováno, spustit inicializaci
+            if (!window.AppManager.isInitialized) {
+                Utils.Debug.log('Initializing app for the first time...');
+                if (window.AppManager) {
+                    await window.AppManager.initializeApplicationModules();
+                }
+            } else {
+                // Pokud už je inicializováno, jen obnovit data
+                Utils.Debug.log('App already initialized, refreshing data');
+                if (window.NavigationManager) {
+                    window.NavigationManager.initialize();
+                }
+                if (window.DashboardManager) {
+                    await window.DashboardManager.loadDashboard();
+                }
             }
             
             Utils.Debug.log('Main app shown successfully');
