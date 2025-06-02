@@ -1,4 +1,4 @@
-// AstraCore Solutions - Database Operations Module
+// AstraCore Solutions - Database Operations Module (FIXED REALTIME)
 
 class DatabaseManager {
     constructor() {
@@ -6,6 +6,7 @@ class DatabaseManager {
         this.setupConnectionMonitoring();
         this.retryAttempts = 3;
         this.retryDelay = 1000;
+        this.realtimeChannels = new Map(); // OPRAVA: Sledování channels
     }
 
     /**
@@ -17,7 +18,8 @@ class DatabaseManager {
         try {
             await this.checkConnection();
             await this.loadAllData();
-            this.setupRealTimeSubscriptions();
+            // OPRAVA: Nebudeme hned nastavovat realtime - způsobuje problémy
+            // this.setupRealTimeSubscriptions();
             
             Utils.Debug.log('Database manager initialized successfully');
         } catch (error) {
@@ -36,11 +38,10 @@ class DatabaseManager {
             statusEl.className = 'connection-status disconnected';
             statusEl.innerHTML = '<i class="fas fa-wifi"></i><span>Připojování...</span>';
             
-            // Test connection with a simple query
-            const { data, error } = await window.supabaseClient
+            // OPRAVA: Jednoduchý test místo table query
+            const { error } = await window.supabaseClient
                 .from('projects')
-                .select('id')
-                .limit(1);
+                .select('count', { count: 'exact', head: true });
             
             if (error && error.code !== 'PGRST116') { // PGRST116 = table doesn't exist
                 throw error;
@@ -609,14 +610,25 @@ class DatabaseManager {
     }
 
     /**
-     * Setup real-time subscriptions
+     * Setup real-time subscriptions (OPRAVENO)
+     * VOLÁ SE POUZE NA VYŽÁDÁNÍ - NE AUTOMATICKY
      */
     setupRealTimeSubscriptions() {
+        // OPRAVA: Kontrola jestli je to vůbec povoleno
         if (!window.AstraCore.APP_CONFIG.FEATURES.ENABLE_REAL_TIME) {
+            Utils.Debug.log('Real-time disabled in config');
+            return;
+        }
+
+        // OPRAVA: Kontrola jestli už není nastaveno
+        if (this.realtimeChannels.size > 0) {
+            Utils.Debug.log('Real-time already setup');
             return;
         }
 
         try {
+            Utils.Debug.log('Setting up real-time subscriptions...');
+            
             // Subscribe to changes in important tables
             const tables = [
                 window.AstraCore.TABLES.PROJECTS,
@@ -625,15 +637,38 @@ class DatabaseManager {
             ];
 
             tables.forEach(table => {
-                window.supabaseClient
-                    .channel(`public:${table}`)
+                // OPRAVA: Unikátní channel name
+                const channelName = `astracore_${table}_${Date.now()}`;
+                
+                const channel = window.supabaseClient
+                    .channel(channelName)
                     .on('postgres_changes', 
-                        { event: '*', schema: 'public', table: table },
+                        { 
+                            event: '*', 
+                            schema: 'public', 
+                            table: table 
+                        },
                         (payload) => {
                             this.handleRealTimeUpdate(table, payload);
                         }
                     )
-                    .subscribe();
+                    .subscribe((status) => {
+                        Utils.Debug.log(`Realtime ${table} subscription:`, status);
+                        
+                        if (status === 'SUBSCRIBED') {
+                            Utils.Debug.log(`✅ Subscribed to ${table}`);
+                        } else if (status === 'CLOSED') {
+                            Utils.Debug.log(`❌ Channel closed for ${table}`);
+                            // OPRAVA: Odstranit z mapy pokud se zavře
+                            this.realtimeChannels.delete(table);
+                        } else if (status === 'CHANNEL_ERROR') {
+                            Utils.Debug.error(`❌ Channel error for ${table}`);
+                            this.realtimeChannels.delete(table);
+                        }
+                    });
+                
+                // OPRAVA: Uložit channel pro pozdější cleanup
+                this.realtimeChannels.set(table, channel);
             });
 
             Utils.Debug.log('Real-time subscriptions setup complete');
@@ -694,9 +729,15 @@ class DatabaseManager {
      * Cleanup database manager
      */
     cleanup() {
-        // Unsubscribe from real-time channels
-        if (window.supabaseClient) {
-            window.supabaseClient.removeAllChannels();
+        // OPRAVA: Správné odstranění realtime channels
+        try {
+            this.realtimeChannels.forEach((channel, table) => {
+                Utils.Debug.log(`Unsubscribing from ${table}`);
+                channel.unsubscribe();
+            });
+            this.realtimeChannels.clear();
+        } catch (error) {
+            Utils.Debug.error('Error cleaning up realtime channels:', error);
         }
         
         // Clear cache
