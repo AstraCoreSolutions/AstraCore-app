@@ -42,13 +42,11 @@ class AppManager {
             // Step 2: Initialize authentication
             await this.initializeAuthentication();
 
-            // Step 3: Only proceed if user is authenticated
-            if (window.appState.isAuthenticated) {
-                await this.initializeApplicationModules();
-            }
+            // Pozor: NEBUDEME automaticky spouštět application modules
+            // Ty se spustí až po úspěšném přihlášení v AuthManager.showMainApp()
 
             this.isInitialized = true;
-            Utils.Debug.log('✅ AstraCore Solutions initialized successfully');
+            Utils.Debug.log('✅ AstraCore Solutions core initialized successfully');
 
         } catch (error) {
             Utils.Debug.error('❌ Application initialization failed:', error);
@@ -73,11 +71,6 @@ class AppManager {
         // Modal manager first
         if (window.ModalManager) {
             window.ModalManager.initialize();
-        }
-
-        // Navigation manager
-        if (window.NavigationManager) {
-            // Don't call initialize here - will be called after auth
         }
 
         // Table manager
@@ -105,6 +98,7 @@ class AppManager {
 
     /**
      * Initialize application modules (only when authenticated)
+     * TATO METODA SE VOLÁ AŽ PO PŘIHLÁŠENÍ
      */
     async initializeApplicationModules() {
         Utils.Debug.log('Initializing application modules...');
