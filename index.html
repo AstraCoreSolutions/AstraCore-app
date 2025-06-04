@@ -21,7 +21,7 @@
     </div>
 
     <!-- Loading Screen -->
-    <div id="loadingScreen" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="background: rgba(255,255,255,0.95); z-index: 9999; display: none;">
+    <div id="loadingScreen" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="background: rgba(255,255,255,0.95); z-index: 9999;">
         <div class="text-center">
             <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;"></div>
             <h5 class="text-muted">Načítání aplikace...</h5>
@@ -29,7 +29,7 @@
     </div>
 
     <!-- Login Screen -->
-    <div id="loginScreen" class="login-container">
+    <div id="loginScreen" class="login-container" style="display: none;">
         <div class="login-card">
             <div class="login-logo">A</div>
             <h2 class="text-center mb-4">AstraCore Solutions</h2>
@@ -89,98 +89,114 @@
             </div>
         </div>
     </div>
-    <!DOCTYPE html>
-<html lang="cs">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AstraCore Solutions - Stavební Management</title>
-    
-    <!-- External CSS -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    
-    <!-- Custom CSS -->
-    <link href="css/styles.css" rel="stylesheet">
-    <link href="css/components.css" rel="stylesheet">
-</head>
-<body>
-    <!-- Connection Status -->
-    <div id="connectionStatus" class="connection-status disconnected" style="display: none;">
-        <i class="fas fa-wifi"></i>
-        <span>Připojování...</span>
-    </div>
 
-    <!-- Loading Screen -->
-    <div id="loadingScreen" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="background: rgba(255,255,255,0.95); z-index: 9999; display: none;">
-        <div class="text-center">
-            <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;"></div>
-            <h5 class="text-muted">Načítání aplikace...</h5>
-        </div>
-    </div>
-
-    <!-- Login Screen -->
-    <div id="loginScreen" class="login-container">
-        <div class="login-card">
-            <div class="login-logo">A</div>
-            <h2 class="text-center mb-4">AstraCore Solutions</h2>
-            <div id="authContainer">
-                <!-- Login Form -->
-                <div id="loginForm">
-                    <form id="signInForm">
-                        <div class="mb-3">
-                            <label class="form-label">E-mail</label>
-                            <input type="email" class="form-control" id="loginEmail" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Heslo</label>
-                            <input type="password" class="form-control" id="loginPassword" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100 mb-3">
-                            <i class="fas fa-sign-in-alt me-2"></i>Přihlásit se
-                        </button>
-                    </form>
-                    <div class="text-center">
-                        <small class="text-muted">
-                            Nemáte účet? 
-                            <a href="#" onclick="showRegisterForm()" class="text-primary">Zaregistrujte se</a>
-                        </small>
-                    </div>
-                </div>
-
-                <!-- Register Form -->
-                <div id="registerForm" style="display: none;">
-                    <form id="signUpForm">
-                        <div class="mb-3">
-                            <label class="form-label">Celé jméno</label>
-                            <input type="text" class="form-control" id="registerName" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">E-mail</label>
-                            <input type="email" class="form-control" id="registerEmail" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Heslo</label>
-                            <input type="password" class="form-control" id="registerPassword" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100 mb-3">
-                            <i class="fas fa-user-plus me-2"></i>Zaregistrovat se
-                        </button>
-                    </form>
-                    <div class="text-center">
-                        <small class="text-muted">
-                            Už máte účet? 
-                            <a href="#" onclick="showLoginForm()" class="text-primary">Přihlaste se</a>
-                        </small>
-                    </div>
-                </div>
-
-                <!-- Messages -->
-                <div id="authMessage" class="mt-3" style="display: none;"></div>
+    <!-- Main Application -->
+    <div id="mainApp" style="display: none;">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <a href="#" class="sidebar-logo">
+                    <div class="sidebar-logo-icon">A</div>
+                    <span class="sidebar-logo-text">AstraCore</span>
+                </a>
+                <button class="sidebar-toggle" onclick="toggleSidebar()">
+                    <i class="fas fa-bars"></i>
+                </button>
             </div>
-        </div>
-    </div>
-    <!-- Dashboard Page -->
+            
+            <nav class="sidebar-menu">
+                <div class="sidebar-item">
+                    <a href="#dashboard" class="sidebar-link active" onclick="navigateTo('dashboard', this)">
+                        <i class="fas fa-home sidebar-icon"></i>
+                        <span class="sidebar-text">Dashboard</span>
+                    </a>
+                </div>
+                <div class="sidebar-item">
+                    <a href="#projects" class="sidebar-link" onclick="navigateTo('projects', this)">
+                        <i class="fas fa-building sidebar-icon"></i>
+                        <span class="sidebar-text">Projekty</span>
+                    </a>
+                </div>
+                <div class="sidebar-item">
+                    <a href="#finance" class="sidebar-link" onclick="navigateTo('finance', this)">
+                        <i class="fas fa-coins sidebar-icon"></i>
+                        <span class="sidebar-text">Finance</span>
+                    </a>
+                </div>
+                <div class="sidebar-item">
+                    <a href="#invoices" class="sidebar-link" onclick="navigateTo('invoices', this)">
+                        <i class="fas fa-file-invoice sidebar-icon"></i>
+                        <span class="sidebar-text">Faktury</span>
+                    </a>
+                </div>
+                <div class="sidebar-item">
+                    <a href="#employees" class="sidebar-link" onclick="navigateTo('employees', this)">
+                        <i class="fas fa-users sidebar-icon"></i>
+                        <span class="sidebar-text">Zaměstnanci</span>
+                    </a>
+                </div>
+                <div class="sidebar-item">
+                    <a href="#equipment" class="sidebar-link" onclick="navigateTo('equipment', this)">
+                        <i class="fas fa-tools sidebar-icon"></i>
+                        <span class="sidebar-text">Nářadí</span>
+                    </a>
+                </div>
+                <div class="sidebar-item">
+                    <a href="#materials" class="sidebar-link" onclick="navigateTo('materials', this)">
+                        <i class="fas fa-boxes sidebar-icon"></i>
+                        <span class="sidebar-text">Materiál</span>
+                    </a>
+                </div>
+                <div class="sidebar-item">
+                    <a href="#reports" class="sidebar-link" onclick="navigateTo('reports', this)">
+                        <i class="fas fa-chart-bar sidebar-icon"></i>
+                        <span class="sidebar-text">Reporty</span>
+                    </a>
+                </div>
+                <div class="sidebar-item">
+                    <a href="#settings" class="sidebar-link" onclick="navigateTo('settings', this)">
+                        <i class="fas fa-cog sidebar-icon"></i>
+                        <span class="sidebar-text">Nastavení</span>
+                    </a>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <div class="main-content" id="mainContent">
+            <!-- Top Bar -->
+            <header class="topbar">
+                <div>
+                    <h4 class="mb-0" id="pageTitle">Dashboard</h4>
+                </div>
+                
+                <div class="topbar-actions">
+                    <button class="topbar-btn" onclick="showNotifications()" title="Notifikace">
+                        <i class="fas fa-bell"></i>
+                        <span class="notification-badge" id="notificationCount" style="display: none;">0</span>
+                    </button>
+                    
+                    <div class="dropdown">
+                        <div class="user-menu" data-bs-toggle="dropdown">
+                            <div class="user-avatar" id="userAvatar">A</div>
+                            <div>
+                                <div class="fw-semibold" id="userName">Admin</div>
+                                <small class="text-muted">Administrátor</small>
+                            </div>
+                        </div>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="#profile"><i class="fas fa-user me-2"></i>Můj profil</a></li>
+                            <li><a class="dropdown-item" href="#settings"><i class="fas fa-cog me-2"></i>Nastavení</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" onclick="signOut()"><i class="fas fa-sign-out-alt me-2"></i>Odhlásit se</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Content Area -->
+            <div class="content-area">
+                <!-- Dashboard Page -->
                 <div id="dashboardPage" class="page-content">
                     <div class="page-header">
                         <h1 class="page-title">Dashboard</h1>
@@ -326,11 +342,11 @@
                                 <table class="table">
                                     <thead>
                                         <tr>
-                                            <th class="sortable" data-sort="name">Projekt</th>
-                                            <th class="sortable" data-sort="client">Klient</th>
-                                            <th class="sortable" data-sort="status">Stav</th>
-                                            <th class="sortable" data-sort="progress">Progress</th>
-                                            <th class="sortable" data-sort="end_date">Deadline</th>
+                                            <th>Projekt</th>
+                                            <th>Klient</th>
+                                            <th>Stav</th>
+                                            <th>Progress</th>
+                                            <th>Deadline</th>
                                             <th>Akce</th>
                                         </tr>
                                     </thead>
@@ -347,7 +363,6 @@
                                     </tbody>
                                 </table>
                             </div>
-                            <div class="pagination-container mt-3"></div>
                         </div>
                     </div>
                 </div>
@@ -389,12 +404,6 @@
                                             <td colspan="6" class="text-center text-muted py-4">
                                                 <i class="fas fa-coins fa-3x mb-3 opacity-50"></i>
                                                 <div>Žádné transakce nenalezeny</div>
-                                                <button class="btn btn-success btn-sm mt-2 me-2" onclick="showAddTransactionModal('income')">
-                                                    <i class="fas fa-plus me-1"></i>Přidat příjem
-                                                </button>
-                                                <button class="btn btn-danger btn-sm mt-2" onclick="showAddTransactionModal('expense')">
-                                                    <i class="fas fa-plus me-1"></i>Přidat výdaj
-                                                </button>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -436,9 +445,6 @@
                                             <td colspan="6" class="text-center text-muted py-4">
                                                 <i class="fas fa-file-invoice fa-3x mb-3 opacity-50"></i>
                                                 <div>Žádné faktury nenalezeny</div>
-                                                <button class="btn btn-primary btn-sm mt-2" onclick="showAddInvoiceModal()">
-                                                    <i class="fas fa-plus me-1"></i>Vystavit fakturu
-                                                </button>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -480,9 +486,6 @@
                                             <td colspan="6" class="text-center text-muted py-4">
                                                 <i class="fas fa-users fa-3x mb-3 opacity-50"></i>
                                                 <div>Žádní zaměstnanci nenalezeni</div>
-                                                <button class="btn btn-primary btn-sm mt-2" onclick="showAddEmployeeModal()">
-                                                    <i class="fas fa-plus me-1"></i>Přidat zaměstnance
-                                                </button>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -524,9 +527,6 @@
                                             <td colspan="6" class="text-center text-muted py-4">
                                                 <i class="fas fa-tools fa-3x mb-3 opacity-50"></i>
                                                 <div>Žádné nářadí nenalezeno</div>
-                                                <button class="btn btn-primary btn-sm mt-2" onclick="showAddEquipmentModal()">
-                                                    <i class="fas fa-plus me-1"></i>Přidat nářadí
-                                                </button>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -568,9 +568,6 @@
                                             <td colspan="6" class="text-center text-muted py-4">
                                                 <i class="fas fa-boxes fa-3x mb-3 opacity-50"></i>
                                                 <div>Žádné materiály nenalezeny</div>
-                                                <button class="btn btn-primary btn-sm mt-2" onclick="showAddMaterialModal()">
-                                                    <i class="fas fa-plus me-1"></i>Přidat materiál
-                                                </button>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -625,7 +622,8 @@
                         </div>
                     </div>
                 </div>
-<!-- Settings Page -->
+
+                <!-- Settings Page -->
                 <div id="settingsPage" class="page-content" style="display: none;">
                     <div class="page-header">
                         <h1 class="page-title">Nastavení</h1>
@@ -645,7 +643,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
     
-    <!-- Custom JS -->
+    <!-- Custom JS - POUZE NAČTENÍ SOUBORŮ -->
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/auth.js"></script>
@@ -656,284 +654,115 @@
     <script src="js/modals.js"></script>
     <script src="js/app.js"></script>
     
-    <!-- HLAVNÍ INICIALIZACE -->
+    <!-- JEDNODUCHÁ INICIALIZACE - BEZ SMYČEK -->
     <script>
-    console.log('🚀 AstraCore Solutions - Starting initialization...');
+    console.log('🚀 AstraCore - Starting...');
 
-    // Základní stav aplikace
-    window.appState = {
-        isAuthenticated: false,
-        currentUser: null,
-        currentPage: 'dashboard',
-        data: {
-            projects: [],
-            transactions: [],
-            invoices: [],
-            employees: [],
-            equipment: [],
-            materials: [],
-            materialPurchases: [],
-            materialUsage: [],
-            equipmentBorrows: [],
-            attendance: []
-        },
-        cache: new Map(),
-        settings: {
-            theme: 'light',
-            language: 'cs',
-            notifications: true,
-            autoSave: true
-        },
-        lastRefresh: null
-    };
-
-    // Hlavní inicializace při načtení DOM
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log('🎯 DOM ready, starting application...');
-        
-        try {
-            // Zkontrolovat dostupnost základních komponent
-            if (!window.supabaseClient) {
-                console.error('❌ Supabase client not available');
-                showError('Chyba: Databázové připojení není dostupné');
-                return;
-            }
-            
-            // Spustit inicializaci s malým zpožděním
-            setTimeout(initializeApplication, 100);
-            
-        } catch (error) {
-            console.error('❌ Critical initialization error:', error);
-            showError('Kritická chyba při spuštění aplikace: ' + error.message);
-        }
-    });
-
-    // HLAVNÍ INICIALIZAČNÍ FUNKCE
-    async function initializeApplication() {
-        console.log('🔧 Initializing AstraCore application...');
-        
-        try {
-            // Zobrazit loading screen
-            showLoading();
-            
-            // Inicializovat AppManager (obsahuje všechnu logiku)
-            if (window.AppManager) {
-                await window.AppManager.initialize();
-                console.log('✅ Application initialized successfully');
-            } else {
-                throw new Error('AppManager not available');
-            }
-            
-        } catch (error) {
-            console.error('❌ Application initialization failed:', error);
-            hideLoading();
-            showError('Inicializace aplikace selhala: ' + error.message);
-        } finally {
-            // Loading screen se skryje v AuthManageru
-        }
-    }
-
-    // UTILITY FUNKCE PRO ERROR HANDLING
-    function showLoading() {
-        const loadingEl = document.getElementById('loadingScreen');
-        if (loadingEl) {
-            loadingEl.style.display = 'flex';
-        }
-    }
-
-    function hideLoading() {
-        const loadingEl = document.getElementById('loadingScreen');
-        if (loadingEl) {
-            loadingEl.style.display = 'none';
-        }
-    }
-
-    function showError(message) {
-        hideLoading();
-        
-        // Vytvořit error screen
-        const errorHTML = `
-            <div class="container-fluid h-100">
-                <div class="row h-100 justify-content-center align-items-center">
-                    <div class="col-md-6 text-center">
-                        <div class="card">
-                            <div class="card-body p-5">
-                                <i class="fas fa-exclamation-triangle fa-4x text-danger mb-4"></i>
-                                <h3 class="text-danger mb-3">Chyba aplikace</h3>
-                                <p class="text-muted mb-4">${escapeHtml(message)}</p>
-                                <div class="d-grid gap-2">
-                                    <button class="btn btn-primary btn-lg" onclick="location.reload()">
-                                        <i class="fas fa-redo me-2"></i>Obnovit stránku
-                                    </button>
-                                    <button class="btn btn-outline-secondary" onclick="showErrorDetails('${escapeHtml(message)}')">
-                                        <i class="fas fa-info-circle me-2"></i>Zobrazit detaily
-                                    </button>
-                                </div>
-                                <div id="errorDetails" class="mt-4 text-start" style="display: none;">
-                                    <h6>Technické detaily:</h6>
-                                    <pre class="bg-light p-3 rounded text-small">${escapeHtml(message)}</pre>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        document.body.innerHTML = errorHTML;
-    }
-
-    function showErrorDetails(message) {
-        const details = document.getElementById('errorDetails');
-        if (details) {
-            details.style.display = details.style.display === 'none' ? 'block' : 'none';
-        }
-    }
-
-    function escapeHtml(text) {
-        if (!text) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    // GLOBÁLNÍ FUNKCE PRO HTML ONCLICK HANDLERY
-    function navigateTo(page, linkElement) {
+    // POUZE základní globální funkce - BEZ INICIALIZACE
+    window.navigateTo = function(page, linkElement) {
         if (window.NavigationManager) {
             window.NavigationManager.navigateTo(page, linkElement);
-        } else {
-            // Fallback pro případ, že NavigationManager není dostupný
-            window.location.hash = page;
         }
-    }
+    };
 
-    function toggleSidebar() {
+    window.toggleSidebar = function() {
         if (window.NavigationManager) {
             window.NavigationManager.toggleSidebar();
-        } else {
-            // Fallback
-            const sidebar = document.getElementById('sidebar');
-            const mainContent = document.getElementById('mainContent');
-            if (sidebar && mainContent) {
-                sidebar.classList.toggle('collapsed');
-                mainContent.classList.toggle('sidebar-collapsed');
-            }
         }
-    }
+    };
 
-    function showRegisterForm() {
+    window.showRegisterForm = function() {
         if (window.AuthManager) {
             window.AuthManager.showRegisterForm();
-        } else {
-            document.getElementById('loginForm').style.display = 'none';
-            document.getElementById('registerForm').style.display = 'block';
         }
-    }
+    };
 
-    function showLoginForm() {
+    window.showLoginForm = function() {
         if (window.AuthManager) {
             window.AuthManager.showLoginForm();
-        } else {
-            document.getElementById('registerForm').style.display = 'none';
-            document.getElementById('loginForm').style.display = 'block';
         }
-    }
+    };
 
-    function signOut() {
+    window.signOut = function() {
         if (window.AuthManager) {
             window.AuthManager.signOut();
-        } else {
-            // Fallback
-            if (window.supabaseClient) {
-                window.supabaseClient.auth.signOut();
-            }
         }
-    }
+    };
 
-    // MODÁLNÍ OKNA - FALLBACK IMPLEMENTACE
-    function showAddProjectModal() {
+    window.showAddProjectModal = function() {
         if (window.ModalManager) {
             window.ModalManager.showAddProjectModal();
         } else {
             alert('Funkce pro přidání projektu bude brzy dostupná');
         }
-    }
+    };
 
-    function showAddInvoiceModal() {
+    window.showAddInvoiceModal = function() {
         if (window.ModalManager) {
             window.ModalManager.showAddInvoiceModal();
         } else {
             alert('Funkce pro vystavení faktury bude brzy dostupná');
         }
-    }
+    };
 
-    function showAddTransactionModal(type) {
+    window.showAddTransactionModal = function(type) {
         if (window.ModalManager) {
             window.ModalManager.showAddTransactionModal(type);
         } else {
-            const typeText = type === 'income' ? 'příjmu' : 'výdaje';
-            alert(`Funkce pro přidání ${typeText} bude brzy dostupná`);
+            alert('Funkce pro přidání transakce bude brzy dostupná');
         }
-    }
+    };
 
-    function showAddEmployeeModal() {
+    window.showAddEmployeeModal = function() {
         if (window.ModalManager) {
             window.ModalManager.showAddEmployeeModal();
         } else {
             alert('Funkce pro přidání zaměstnance bude brzy dostupná');
         }
-    }
+    };
 
-    function showAddEquipmentModal() {
+    window.showAddEquipmentModal = function() {
         if (window.ModalManager) {
             window.ModalManager.showAddEquipmentModal();
         } else {
             alert('Funkce pro přidání nářadí bude brzy dostupná');
         }
-    }
+    };
 
-    function showAddMaterialModal() {
+    window.showAddMaterialModal = function() {
         if (window.ModalManager) {
             window.ModalManager.showAddMaterialModal();
         } else {
             alert('Funkce pro přidání materiálu bude brzy dostupná');
         }
-    }
+    };
 
-    function showNotifications() {
+    window.showNotifications = function() {
         if (window.ModalManager) {
             window.ModalManager.showNotifications();
         } else {
             alert('Notifikace budou brzy dostupné');
         }
-    }
+    };
 
-    // VYSTAVIT GLOBÁLNÍ FUNKCE
-    window.navigateTo = navigateTo;
-    window.toggleSidebar = toggleSidebar;
-    window.showRegisterForm = showRegisterForm;
-    window.showLoginForm = showLoginForm;
-    window.signOut = signOut;
-    window.showAddProjectModal = showAddProjectModal;
-    window.showAddInvoiceModal = showAddInvoiceModal;
-    window.showAddTransactionModal = showAddTransactionModal;
-    window.showAddEmployeeModal = showAddEmployeeModal;
-    window.showAddEquipmentModal = showAddEquipmentModal;
-    window.showAddMaterialModal = showAddMaterialModal;
-    window.showNotifications = showNotifications;
-    window.showErrorDetails = showErrorDetails;
-
-    // ERROR HANDLING
-    window.addEventListener('error', function(event) {
-        console.error('Global JavaScript error:', event.error);
+    // POUZE jedna inicializace při DOM ready
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('📄 DOM ready');
+        
+        // Počkej až se načtou všechny skripty
+        setTimeout(function() {
+            if (window.AppManager) {
+                console.log('🔧 Starting AppManager...');
+                window.AppManager.initialize().catch(function(error) {
+                    console.error('❌ Init failed:', error);
+                });
+            } else {
+                console.error('❌ AppManager not found');
+            }
+        }, 100);
     });
 
-    window.addEventListener('unhandledrejection', function(event) {
-        console.error('Unhandled promise rejection:', event.reason);
-        event.preventDefault();
-    });
-
-    console.log('✅ AstraCore initialization script loaded');
+    console.log('✅ Basic init loaded');
     </script>
 </body>
 </html>
