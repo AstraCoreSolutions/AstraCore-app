@@ -89,114 +89,98 @@
             </div>
         </div>
     </div>
+    <!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AstraCore Solutions - Stavební Management</title>
+    
+    <!-- External CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link href="css/styles.css" rel="stylesheet">
+    <link href="css/components.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Connection Status -->
+    <div id="connectionStatus" class="connection-status disconnected" style="display: none;">
+        <i class="fas fa-wifi"></i>
+        <span>Připojování...</span>
+    </div>
 
-    <!-- Main Application -->
-    <div id="mainApp" style="display: none;">
-        <!-- Sidebar -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <a href="#" class="sidebar-logo">
-                    <div class="sidebar-logo-icon">A</div>
-                    <span class="sidebar-logo-text">AstraCore</span>
-                </a>
-                <button class="sidebar-toggle" onclick="toggleSidebar()">
-                    <i class="fas fa-bars"></i>
-                </button>
-            </div>
-            
-            <nav class="sidebar-menu">
-                <div class="sidebar-item">
-                    <a href="#dashboard" class="sidebar-link active" onclick="navigateTo('dashboard', this)">
-                        <i class="fas fa-home sidebar-icon"></i>
-                        <span class="sidebar-text">Dashboard</span>
-                    </a>
-                </div>
-                <div class="sidebar-item">
-                    <a href="#projects" class="sidebar-link" onclick="navigateTo('projects', this)">
-                        <i class="fas fa-building sidebar-icon"></i>
-                        <span class="sidebar-text">Projekty</span>
-                    </a>
-                </div>
-                <div class="sidebar-item">
-                    <a href="#finance" class="sidebar-link" onclick="navigateTo('finance', this)">
-                        <i class="fas fa-coins sidebar-icon"></i>
-                        <span class="sidebar-text">Finance</span>
-                    </a>
-                </div>
-                <div class="sidebar-item">
-                    <a href="#invoices" class="sidebar-link" onclick="navigateTo('invoices', this)">
-                        <i class="fas fa-file-invoice sidebar-icon"></i>
-                        <span class="sidebar-text">Faktury</span>
-                    </a>
-                </div>
-                <div class="sidebar-item">
-                    <a href="#employees" class="sidebar-link" onclick="navigateTo('employees', this)">
-                        <i class="fas fa-users sidebar-icon"></i>
-                        <span class="sidebar-text">Zaměstnanci</span>
-                    </a>
-                </div>
-                <div class="sidebar-item">
-                    <a href="#equipment" class="sidebar-link" onclick="navigateTo('equipment', this)">
-                        <i class="fas fa-tools sidebar-icon"></i>
-                        <span class="sidebar-text">Nářadí</span>
-                    </a>
-                </div>
-                <div class="sidebar-item">
-                    <a href="#materials" class="sidebar-link" onclick="navigateTo('materials', this)">
-                        <i class="fas fa-boxes sidebar-icon"></i>
-                        <span class="sidebar-text">Materiál</span>
-                    </a>
-                </div>
-                <div class="sidebar-item">
-                    <a href="#reports" class="sidebar-link" onclick="navigateTo('reports', this)">
-                        <i class="fas fa-chart-bar sidebar-icon"></i>
-                        <span class="sidebar-text">Reporty</span>
-                    </a>
-                </div>
-                <div class="sidebar-item">
-                    <a href="#settings" class="sidebar-link" onclick="navigateTo('settings', this)">
-                        <i class="fas fa-cog sidebar-icon"></i>
-                        <span class="sidebar-text">Nastavení</span>
-                    </a>
-                </div>
-            </nav>
-        </aside>
+    <!-- Loading Screen -->
+    <div id="loadingScreen" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="background: rgba(255,255,255,0.95); z-index: 9999; display: none;">
+        <div class="text-center">
+            <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;"></div>
+            <h5 class="text-muted">Načítání aplikace...</h5>
+        </div>
+    </div>
 
-        <!-- Main Content -->
-        <div class="main-content" id="mainContent">
-            <!-- Top Bar -->
-            <header class="topbar">
-                <div>
-                    <h4 class="mb-0" id="pageTitle">Dashboard</h4>
-                </div>
-                
-                <div class="topbar-actions">
-                    <button class="topbar-btn" onclick="showNotifications()" title="Notifikace">
-                        <i class="fas fa-bell"></i>
-                        <span class="notification-badge" id="notificationCount" style="display: none;">0</span>
-                    </button>
-                    
-                    <div class="dropdown">
-                        <div class="user-menu" data-bs-toggle="dropdown">
-                            <div class="user-avatar" id="userAvatar">A</div>
-                            <div>
-                                <div class="fw-semibold" id="userName">Admin</div>
-                                <small class="text-muted">Administrátor</small>
-                            </div>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-container">
+        <div class="login-card">
+            <div class="login-logo">A</div>
+            <h2 class="text-center mb-4">AstraCore Solutions</h2>
+            <div id="authContainer">
+                <!-- Login Form -->
+                <div id="loginForm">
+                    <form id="signInForm">
+                        <div class="mb-3">
+                            <label class="form-label">E-mail</label>
+                            <input type="email" class="form-control" id="loginEmail" required>
                         </div>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="#profile"><i class="fas fa-user me-2"></i>Můj profil</a></li>
-                            <li><a class="dropdown-item" href="#settings"><i class="fas fa-cog me-2"></i>Nastavení</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" onclick="signOut()"><i class="fas fa-sign-out-alt me-2"></i>Odhlásit se</a></li>
-                        </ul>
+                        <div class="mb-3">
+                            <label class="form-label">Heslo</label>
+                            <input type="password" class="form-control" id="loginPassword" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mb-3">
+                            <i class="fas fa-sign-in-alt me-2"></i>Přihlásit se
+                        </button>
+                    </form>
+                    <div class="text-center">
+                        <small class="text-muted">
+                            Nemáte účet? 
+                            <a href="#" onclick="showRegisterForm()" class="text-primary">Zaregistrujte se</a>
+                        </small>
                     </div>
                 </div>
-            </header>
 
-            <!-- Content Area -->
-            <div class="content-area">
-                <!-- Dashboard Page -->
+                <!-- Register Form -->
+                <div id="registerForm" style="display: none;">
+                    <form id="signUpForm">
+                        <div class="mb-3">
+                            <label class="form-label">Celé jméno</label>
+                            <input type="text" class="form-control" id="registerName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">E-mail</label>
+                            <input type="email" class="form-control" id="registerEmail" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Heslo</label>
+                            <input type="password" class="form-control" id="registerPassword" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mb-3">
+                            <i class="fas fa-user-plus me-2"></i>Zaregistrovat se
+                        </button>
+                    </form>
+                    <div class="text-center">
+                        <small class="text-muted">
+                            Už máte účet? 
+                            <a href="#" onclick="showLoginForm()" class="text-primary">Přihlaste se</a>
+                        </small>
+                    </div>
+                </div>
+
+                <!-- Messages -->
+                <div id="authMessage" class="mt-3" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+    <!-- Dashboard Page -->
                 <div id="dashboardPage" class="page-content">
                     <div class="page-header">
                         <h1 class="page-title">Dashboard</h1>
@@ -307,13 +291,14 @@
                         <div class="col-lg-4 mb-4">
                             <div class="card">
                                 <div class="card-header">
-                                    <h5 class="mb-0">Poslední aktivity</h5>
+                                    <h5 class="mb-0">Kritické úkoly</h5>
                                 </div>
                                 <div class="card-body">
-                                    <div id="recentActivities">
+                                    <div id="criticalTasksList">
                                         <div class="text-center text-muted py-4">
-                                            <i class="fas fa-clock fa-3x mb-3 opacity-50"></i>
-                                            <p>Žádné aktivity</p>
+                                            <i class="fas fa-check-circle fa-3x mb-3 opacity-50 text-success"></i>
+                                            <p>Žádné kritické úkoly</p>
+                                            <small>Vše je pod kontrolou!</small>
                                         </div>
                                     </div>
                                 </div>
@@ -337,12 +322,32 @@
 
                     <div class="card">
                         <div class="card-body">
-                            <div id="projectsTable">
-                                <div class="text-center text-muted py-4">
-                                    <i class="fas fa-building fa-3x mb-3 opacity-50"></i>
-                                    <p>Žádné projekty</p>
-                                </div>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-sort="name">Projekt</th>
+                                            <th class="sortable" data-sort="client">Klient</th>
+                                            <th class="sortable" data-sort="status">Stav</th>
+                                            <th class="sortable" data-sort="progress">Progress</th>
+                                            <th class="sortable" data-sort="end_date">Deadline</th>
+                                            <th>Akce</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="projectsTableBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                <i class="fas fa-building fa-3x mb-3 opacity-50"></i>
+                                                <div>Žádné projekty nenalezeny</div>
+                                                <button class="btn btn-primary btn-sm mt-2" onclick="showAddProjectModal()">
+                                                    <i class="fas fa-plus me-1"></i>Přidat projekt
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
+                            <div class="pagination-container mt-3"></div>
                         </div>
                     </div>
                 </div>
@@ -367,11 +372,33 @@
 
                     <div class="card">
                         <div class="card-body">
-                            <div id="transactionsTable">
-                                <div class="text-center text-muted py-4">
-                                    <i class="fas fa-coins fa-3x mb-3 opacity-50"></i>
-                                    <p>Žádné transakce</p>
-                                </div>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Typ</th>
+                                            <th>Popis</th>
+                                            <th>Částka</th>
+                                            <th>Kategorie</th>
+                                            <th>Datum</th>
+                                            <th>Akce</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="transactionsTableBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                <i class="fas fa-coins fa-3x mb-3 opacity-50"></i>
+                                                <div>Žádné transakce nenalezeny</div>
+                                                <button class="btn btn-success btn-sm mt-2 me-2" onclick="showAddTransactionModal('income')">
+                                                    <i class="fas fa-plus me-1"></i>Přidat příjem
+                                                </button>
+                                                <button class="btn btn-danger btn-sm mt-2" onclick="showAddTransactionModal('expense')">
+                                                    <i class="fas fa-plus me-1"></i>Přidat výdaj
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -392,11 +419,30 @@
 
                     <div class="card">
                         <div class="card-body">
-                            <div id="invoicesTable">
-                                <div class="text-center text-muted py-4">
-                                    <i class="fas fa-file-invoice fa-3x mb-3 opacity-50"></i>
-                                    <p>Žádné faktury</p>
-                                </div>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Číslo faktury</th>
+                                            <th>Klient</th>
+                                            <th>Částka</th>
+                                            <th>Stav</th>
+                                            <th>Splatnost</th>
+                                            <th>Akce</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="invoicesTableBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                <i class="fas fa-file-invoice fa-3x mb-3 opacity-50"></i>
+                                                <div>Žádné faktury nenalezeny</div>
+                                                <button class="btn btn-primary btn-sm mt-2" onclick="showAddInvoiceModal()">
+                                                    <i class="fas fa-plus me-1"></i>Vystavit fakturu
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -417,11 +463,30 @@
 
                     <div class="card">
                         <div class="card-body">
-                            <div id="employeesTable">
-                                <div class="text-center text-muted py-4">
-                                    <i class="fas fa-users fa-3x mb-3 opacity-50"></i>
-                                    <p>Žádní zaměstnanci</p>
-                                </div>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Jméno</th>
+                                            <th>Kontakt</th>
+                                            <th>Stav</th>
+                                            <th>Datum nástupu</th>
+                                            <th>Mzda</th>
+                                            <th>Akce</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="employeesTableBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                <i class="fas fa-users fa-3x mb-3 opacity-50"></i>
+                                                <div>Žádní zaměstnanci nenalezeni</div>
+                                                <button class="btn btn-primary btn-sm mt-2" onclick="showAddEmployeeModal()">
+                                                    <i class="fas fa-plus me-1"></i>Přidat zaměstnance
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -442,11 +507,30 @@
 
                     <div class="card">
                         <div class="card-body">
-                            <div id="equipmentTable">
-                                <div class="text-center text-muted py-4">
-                                    <i class="fas fa-tools fa-3x mb-3 opacity-50"></i>
-                                    <p>Žádné nářadí</p>
-                                </div>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Název</th>
+                                            <th>Výrobce</th>
+                                            <th>Kategorie</th>
+                                            <th>Stav</th>
+                                            <th>Umístění</th>
+                                            <th>Akce</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="equipmentTableBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                <i class="fas fa-tools fa-3x mb-3 opacity-50"></i>
+                                                <div>Žádné nářadí nenalezeno</div>
+                                                <button class="btn btn-primary btn-sm mt-2" onclick="showAddEquipmentModal()">
+                                                    <i class="fas fa-plus me-1"></i>Přidat nářadí
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -467,11 +551,30 @@
 
                     <div class="card">
                         <div class="card-body">
-                            <div id="materialsTable">
-                                <div class="text-center text-muted py-4">
-                                    <i class="fas fa-boxes fa-3x mb-3 opacity-50"></i>
-                                    <p>Žádné materiály</p>
-                                </div>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Název</th>
+                                            <th>Kategorie</th>
+                                            <th>Jednotka</th>
+                                            <th>Dodavatel</th>
+                                            <th>Stav</th>
+                                            <th>Akce</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="materialsTableBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                <i class="fas fa-boxes fa-3x mb-3 opacity-50"></i>
+                                                <div>Žádné materiály nenalezeny</div>
+                                                <button class="btn btn-primary btn-sm mt-2" onclick="showAddMaterialModal()">
+                                                    <i class="fas fa-plus me-1"></i>Přidat materiál
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -522,8 +625,7 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- Settings Page -->
+<!-- Settings Page -->
                 <div id="settingsPage" class="page-content" style="display: none;">
                     <div class="page-header">
                         <h1 class="page-title">Nastavení</h1>
@@ -543,13 +645,20 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
     
-    <!-- Custom JS - pouze základní config -->
+    <!-- Custom JS -->
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/database.js"></script>
+    <script src="js/navigation.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/tables.js"></script>
+    <script src="js/modals.js"></script>
+    <script src="js/app.js"></script>
     
-    <!-- JEDNODUCHÁ INICIALIZACE -->
+    <!-- HLAVNÍ INICIALIZACE -->
     <script>
-    console.log('🚀 SIMPLE INIT: Starting...');
+    console.log('🚀 AstraCore Solutions - Starting initialization...');
 
     // Základní stav aplikace
     window.appState = {
@@ -571,825 +680,114 @@
         cache: new Map(),
         settings: {
             theme: 'light',
-            language: 'cs'
-        }
+            language: 'cs',
+            notifications: true,
+            autoSave: true
+        },
+        lastRefresh: null
     };
 
-    // Hlavní inicializace
+    // Hlavní inicializace při načtení DOM
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('🎯 DOM ready, starting simple init...');
+        console.log('🎯 DOM ready, starting application...');
         
         try {
-            // Zkontrolovat Supabase
+            // Zkontrolovat dostupnost základních komponent
             if (!window.supabaseClient) {
-                console.error('❌ Supabase not available');
-                showError('Chyba: Supabase není dostupný');
+                console.error('❌ Supabase client not available');
+                showError('Chyba: Databázové připojení není dostupné');
                 return;
             }
             
-            // Spustit s malým zpožděním
-            setTimeout(initApp, 500);
+            // Spustit inicializaci s malým zpožděním
+            setTimeout(initializeApplication, 100);
             
         } catch (error) {
-            console.error('❌ Init error:', error);
-            showError('Chyba při inicializaci: ' + error.message);
+            console.error('❌ Critical initialization error:', error);
+            showError('Kritická chyba při spuštění aplikace: ' + error.message);
         }
     });
 
-    // HLAVNÍ INICIALIZACE
-    async function initApp() {
-        console.log('🔧 Init app starting...');
+    // HLAVNÍ INICIALIZAČNÍ FUNKCE
+    async function initializeApplication() {
+        console.log('🔧 Initializing AstraCore application...');
         
         try {
+            // Zobrazit loading screen
             showLoading();
             
-            // Zkontrolovat session pouze jednou
-            let session = null;
-            try {
-                const { data } = await window.supabaseClient.auth.getSession();
-                session = data.session;
-                console.log('📝 Session check:', session ? 'found' : 'none');
-            } catch (error) {
-                console.log('⚠️ Session check failed:', error.message);
-            }
-            
-            // Nastavit stav
-            if (session?.user) {
-                console.log('✅ User authenticated');
-                window.appState.isAuthenticated = true;
-                window.appState.currentUser = session.user;
-                
-                await loadAppData();
-                showMainApp();
-                
+            // Inicializovat AppManager (obsahuje všechnu logiku)
+            if (window.AppManager) {
+                await window.AppManager.initialize();
+                console.log('✅ Application initialized successfully');
             } else {
-                console.log('🔐 No authentication, showing login');
-                showLogin();
+                throw new Error('AppManager not available');
             }
-            
-            setupSimpleAuth();
-            setupBasicFunctions();
-            
-            hideLoading();
-            console.log('✅ Simple init completed successfully');
             
         } catch (error) {
-            console.error('❌ Init failed:', error);
+            console.error('❌ Application initialization failed:', error);
             hideLoading();
-            showError('Inicializace selhala: ' + error.message);
+            showError('Inicializace aplikace selhala: ' + error.message);
+        } finally {
+            // Loading screen se skryje v AuthManageru
         }
     }
 
-    // NAČTENÍ DAT
-    async function loadAppData() {
-        console.log('📊 Loading app data...');
-        
-        const tables = ['projects', 'transactions', 'invoices', 'employees', 'equipment', 'materials'];
-        
-        for (const table of tables) {
-            try {
-                const { data, error } = await window.supabaseClient
-                    .from(table)
-                    .select('*')
-                    .limit(100);
-                
-                if (!error) {
-                    window.appState.data[table] = data || [];
-                    console.log(`✅ Loaded ${data?.length || 0} ${table}`);
-                } else {
-                    console.log(`⚠️ ${table} table not found:`, error.message);
-                    window.appState.data[table] = [];
-                }
-            } catch (error) {
-                console.log(`⚠️ Error loading ${table}:`, error.message);
-                window.appState.data[table] = [];
-            }
-        }
-    }
-
-    // ZOBRAZIT HLAVNÍ APP
-    function showMainApp() {
-        console.log('🏠 Showing main app...');
-        
-        document.getElementById('loginScreen').style.display = 'none';
-        document.getElementById('mainApp').style.display = 'block';
-        
-        // Update user info
-        const user = window.appState.currentUser;
-        const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
-        
-        const userNameEl = document.getElementById('userName');
-        const userAvatarEl = document.getElementById('userAvatar');
-        
-        if (userNameEl) userNameEl.textContent = userName;
-        if (userAvatarEl) userAvatarEl.textContent = userName.charAt(0).toUpperCase();
-        
-        initBasicFunctions();
-    }
-
-    // ZOBRAZIT LOGIN
-    function showLogin() {
-        document.getElementById('loginScreen').style.display = 'block';
-        document.getElementById('mainApp').style.display = 'none';
-        setupLoginHandlers();
-    }
-
-    // ZÁKLADNÍ FUNKCE
-    function initBasicFunctions() {
-        console.log('⚙️ Initializing basic functions...');
-        
-        setupNavigation();
-        updateDashboard();
-        setupBasicModals();
-    }
-
-    // NAVIGACE
-    function setupNavigation() {
-        const hash = window.location.hash.replace('#', '') || 'dashboard';
-        navigateToPage(hash);
-        
-        window.addEventListener('hashchange', () => {
-            const page = window.location.hash.replace('#', '') || 'dashboard';
-            navigateToPage(page);
-        });
-    }
-
-    // NAVIGACE NA STRÁNKU
-    function navigateToPage(page) {
-        console.log('📄 Navigating to:', page);
-        
-        // Skrýt všechny stránky
-        const pages = ['dashboard', 'projects', 'finance', 'invoices', 'employees', 'equipment', 'materials', 'reports', 'settings'];
-        pages.forEach(p => {
-            const pageEl = document.getElementById(p + 'Page');
-            if (pageEl) pageEl.style.display = 'none';
-        });
-        
-        // Zobrazit cílovou stránku
-        const targetPage = document.getElementById(page + 'Page');
-        if (targetPage) {
-            targetPage.style.display = 'block';
-            
-            // Update title
-            const titles = {
-                dashboard: 'Dashboard',
-                projects: 'Projekty',
-                finance: 'Finance',
-                invoices: 'Faktury',
-                employees: 'Zaměstnanci',
-                equipment: 'Nářadí',
-                materials: 'Materiál',
-                reports: 'Reporty',
-                settings: 'Nastavení'
-            };
-            
-            const titleEl = document.getElementById('pageTitle');
-            if (titleEl) titleEl.textContent = titles[page] || page;
-            
-            // Update sidebar
-            document.querySelectorAll('.sidebar-link').forEach(link => {
-                link.classList.remove('active');
-            });
-            
-            const activeLink = document.querySelector(`[onclick*="${page}"]`);
-            if (activeLink) activeLink.classList.add('active');
-            
-            loadPageData(page);
-        }
-        
-        window.appState.currentPage = page;
-    }
-
-    // NAČÍST DATA PRO STRÁNKU
-    function loadPageData(page) {
-        console.log('📊 Loading data for page:', page);
-        
-        switch(page) {
-            case 'dashboard':
-                updateDashboard();
-                break;
-            case 'projects':
-                updateProjectsTable();
-                break;
-            case 'finance':
-                updateTransactionsTable();
-                break;
-            case 'invoices':
-                updateInvoicesTable();
-                break;
-            case 'employees':
-                updateEmployeesTable();
-                break;
-            case 'equipment':
-                updateEquipmentTable();
-                break;
-            case 'materials':
-                updateMaterialsTable();
-                break;
-        }
-    }
-
-    // UPDATE DASHBOARD
-    function updateDashboard() {
-        const data = window.appState.data;
-        
-        // Statistiky
-        const activeProjects = data.projects.filter(p => p.status === 'active').length;
-        
-        const currentMonth = new Date().getMonth();
-        const currentYear = new Date().getFullYear();
-        
-        const monthlyIncome = data.transactions
-            .filter(t => {
-                const date = new Date(t.transaction_date || t.created_at || Date.now());
-                return t.type === 'income' && 
-                       date.getMonth() === currentMonth && 
-                       date.getFullYear() === currentYear;
-            })
-            .reduce((sum, t) => sum + (parseFloat(t.total_amount) || 0), 0);
-        
-        const monthlyExpenses = data.transactions
-            .filter(t => {
-                const date = new Date(t.transaction_date || t.created_at || Date.now());
-                return t.type === 'expense' && 
-                       date.getMonth() === currentMonth && 
-                       date.getFullYear() === currentYear;
-            })
-            .reduce((sum, t) => sum + (parseFloat(t.total_amount) || 0), 0);
-        
-        const overdueInvoices = data.invoices.filter(i => {
-            if (i.status !== 'pending') return false;
-            const dueDate = new Date(i.due_date);
-            return dueDate < new Date();
-        }).length;
-        
-        // Update elementy
-        updateElement('statActiveProjects', activeProjects);
-        updateElement('statMonthlyRevenue', formatCurrency(monthlyIncome));
-        updateElement('statMonthlyExpenses', formatCurrency(monthlyExpenses));
-        updateElement('statOverdueInvoices', overdueInvoices);
-        
-        // Update projects list
-        updateRecentProjects();
-    }
-
-    // UPDATE RECENT PROJECTS
-    function updateRecentProjects() {
-        const container = document.getElementById('recentProjectsList');
-        if (!container) return;
-        
-        const recentProjects = window.appState.data.projects
-            .filter(p => p.status === 'active')
-            .slice(0, 5);
-        
-        if (recentProjects.length === 0) {
-            container.innerHTML = `
-                <div class="text-center text-muted py-4">
-                    <i class="fas fa-building fa-3x mb-3 opacity-50"></i>
-                    <p>Zatím žádné projekty</p>
-                    <button class="btn btn-primary" onclick="showAddProjectModal()">
-                        Vytvořit první projekt
-                    </button>
-                </div>
-            `;
-            return;
-        }
-        
-        let html = '';
-        recentProjects.forEach(project => {
-            const progress = project.progress || 0;
-            const isOverdue = project.end_date && new Date(project.end_date) < new Date();
-            
-            html += `
-                <div class="border-bottom pb-3 mb-3">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div class="flex-grow-1">
-                            <h6 class="mb-1">
-                                ${escapeHtml(project.name)}
-                                ${isOverdue ? '<i class="fas fa-exclamation-triangle text-warning ms-1"></i>' : ''}
-                            </h6>
-                            <small class="text-muted">${escapeHtml(project.client || '')}</small>
-                        </div>
-                        <span class="badge bg-success">Aktivní</span>
-                    </div>
-                    <div class="mt-2">
-                        <div class="d-flex justify-content-between mb-1">
-                            <small>Progress: ${progress}%</small>
-                            <small>${project.end_date ? formatDate(project.end_date) : 'Bez termínu'}</small>
-                        </div>
-                        <div class="progress" style="height: 5px;">
-                            <div class="progress-bar bg-primary" style="width: ${Math.min(progress, 100)}%"></div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-        
-        container.innerHTML = html;
-    }
-
-    // UPDATE TABLES
-    function updateProjectsTable() {
-        const container = document.getElementById('projectsTable');
-        if (!container) return;
-        
-        const projects = window.appState.data.projects;
-        
-        if (projects.length === 0) {
-            container.innerHTML = `
-                <div class="text-center text-muted py-4">
-                    <i class="fas fa-building fa-3x mb-3 opacity-50"></i>
-                    <p>Žádné projekty</p>
-                    <button class="btn btn-primary" onclick="showAddProjectModal()">
-                        <i class="fas fa-plus me-1"></i>Přidat projekt
-                    </button>
-                </div>
-            `;
-            return;
-        }
-        
-        let html = `
-            <div class="table-responsive">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Projekt</th>
-                            <th>Klient</th>
-                            <th>Stav</th>
-                            <th>Progress</th>
-                            <th>Deadline</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
-        
-        projects.forEach(project => {
-            const progress = project.progress || 0;
-            const isOverdue = project.end_date && new Date(project.end_date) < new Date();
-            
-            html += `
-                <tr>
-                    <td>
-                        <div class="fw-semibold">${escapeHtml(project.name)}</div>
-                        <small class="text-muted">${escapeHtml(project.description || '')}</small>
-                    </td>
-                    <td>${escapeHtml(project.client || '')}</td>
-                    <td>
-                        <span class="badge bg-success">Aktivní</span>
-                        ${isOverdue ? '<i class="fas fa-exclamation-triangle text-warning ms-1"></i>' : ''}
-                    </td>
-                    <td>
-                        <div class="d-flex align-items-center">
-                            <div class="progress flex-grow-1 me-2" style="height: 6px;">
-                                <div class="progress-bar bg-primary" style="width: ${Math.min(progress, 100)}%"></div>
-                            </div>
-                            <small>${progress}%</small>
-                        </div>
-                    </td>
-                    <td>${project.end_date ? formatDate(project.end_date) : 'Neurčeno'}</td>
-                </tr>
-            `;
-        });
-        
-        html += '</tbody></table></div>';
-        container.innerHTML = html;
-    }
-
-    function updateTransactionsTable() {
-        const container = document.getElementById('transactionsTable');
-        if (!container) return;
-        
-        const transactions = window.appState.data.transactions;
-        
-        if (transactions.length === 0) {
-            container.innerHTML = `
-                <div class="text-center text-muted py-4">
-                    <i class="fas fa-coins fa-3x mb-3 opacity-50"></i>
-                    <p>Žádné transakce</p>
-                    <button class="btn btn-success me-2" onclick="showAddTransactionModal('income')">
-                        <i class="fas fa-plus me-1"></i>Přidat příjem
-                    </button>
-                    <button class="btn btn-danger" onclick="showAddTransactionModal('expense')">
-                        <i class="fas fa-plus me-1"></i>Přidat výdaj
-                    </button>
-                </div>
-            `;
-            return;
-        }
-        
-        let html = `
-            <div class="table-responsive">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Typ</th>
-                            <th>Popis</th>
-                            <th>Částka</th>
-                            <th>Datum</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
-        
-        transactions.forEach(transaction => {
-            const typeIcon = transaction.type === 'income' ? 'fa-arrow-up text-success' : 'fa-arrow-down text-danger';
-            const typeText = transaction.type === 'income' ? 'Příjem' : 'Výdaj';
-            const amount = transaction.total_amount || 0;
-            const amountClass = transaction.type === 'income' ? 'text-success' : 'text-danger';
-            
-            html += `
-                <tr>
-                    <td>
-                        <i class="fas ${typeIcon} me-2"></i>
-                        ${typeText}
-                    </td>
-                    <td>${escapeHtml(transaction.description || '')}</td>
-                    <td class="${amountClass} fw-semibold">${formatCurrency(amount)}</td>
-                    <td>${formatDate(transaction.transaction_date || transaction.created_at)}</td>
-                </tr>
-            `;
-        });
-        
-        html += '</tbody></table></div>';
-        container.innerHTML = html;
-    }
-
-    function updateInvoicesTable() {
-        const container = document.getElementById('invoicesTable');
-        if (!container) return;
-        
-        const invoices = window.appState.data.invoices;
-        
-        if (invoices.length === 0) {
-            container.innerHTML = `
-                <div class="text-center text-muted py-4">
-                    <i class="fas fa-file-invoice fa-3x mb-3 opacity-50"></i>
-                    <p>Žádné faktury</p>
-                    <button class="btn btn-primary" onclick="showAddInvoiceModal()">
-                        <i class="fas fa-plus me-1"></i>Vystavit fakturu
-                    </button>
-                </div>
-            `;
-            return;
-        }
-        
-        let html = `
-            <div class="table-responsive">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Číslo faktury</th>
-                            <th>Klient</th>
-                            <th>Částka</th>
-                            <th>Stav</th>
-                            <th>Splatnost</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
-        
-        invoices.forEach(invoice => {
-            const isOverdue = invoice.status === 'pending' && new Date(invoice.due_date) < new Date();
-            const amount = invoice.total_amount || 0;
-            
-            html += `
-                <tr ${isOverdue ? 'class="table-warning"' : ''}>
-                    <td>
-                        <div class="fw-semibold">${escapeHtml(invoice.invoice_number || '')}</div>
-                        <small class="text-muted">${formatDate(invoice.issue_date)}</small>
-                    </td>
-                    <td>${escapeHtml(invoice.client_name || '')}</td>
-                    <td class="fw-semibold">${formatCurrency(amount)}</td>
-                    <td>
-                        <span class="badge ${invoice.status === 'paid' ? 'bg-success' : 'bg-warning'}">
-                            ${invoice.status === 'paid' ? 'Zaplaceno' : 'Čekající'}
-                        </span>
-                        ${isOverdue ? '<i class="fas fa-exclamation-triangle text-warning ms-1"></i>' : ''}
-                    </td>
-                    <td>
-                        ${formatDate(invoice.due_date)}
-                        ${isOverdue ? '<br><small class="text-danger">Po splatnosti</small>' : ''}
-                    </td>
-                </tr>
-            `;
-        });
-        
-        html += '</tbody></table></div>';
-        container.innerHTML = html;
-    }
-
-    function updateEmployeesTable() {
-        const container = document.getElementById('employeesTable');
-        if (!container) return;
-        
-        const employees = window.appState.data.employees;
-        
-        if (employees.length === 0) {
-            container.innerHTML = `
-                <div class="text-center text-muted py-4">
-                    <i class="fas fa-users fa-3x mb-3 opacity-50"></i>
-                    <p>Žádní zaměstnanci</p>
-                    <button class="btn btn-primary" onclick="showAddEmployeeModal()">
-                        <i class="fas fa-plus me-1"></i>Přidat zaměstnance
-                    </button>
-                </div>
-            `;
-            return;
-        }
-        
-        let html = `
-            <div class="table-responsive">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Jméno</th>
-                            <th>Pozice</th>
-                            <th>Kontakt</th>
-                            <th>Stav</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
-        
-        employees.forEach(employee => {
-            const fullName = `${employee.first_name || ''} ${employee.last_name || ''}`.trim();
-            
-            html += `
-                <tr>
-                    <td>
-                        <div class="fw-semibold">${escapeHtml(fullName)}</div>
-                        <small class="text-muted">${formatDate(employee.start_date)}</small>
-                    </td>
-                    <td>${escapeHtml(employee.position || '')}</td>
-                    <td>
-                        <div>${escapeHtml(employee.phone || '')}</div>
-                        <small class="text-muted">${escapeHtml(employee.email || '')}</small>
-                    </td>
-                    <td><span class="badge bg-success">Aktivní</span></td>
-                </tr>
-            `;
-        });
-        
-        html += '</tbody></table></div>';
-        container.innerHTML = html;
-    }
-
-    function updateEquipmentTable() {
-        const container = document.getElementById('equipmentTable');
-        if (!container) return;
-        
-        const equipment = window.appState.data.equipment;
-        
-        if (equipment.length === 0) {
-            container.innerHTML = `
-                <div class="text-center text-muted py-4">
-                    <i class="fas fa-tools fa-3x mb-3 opacity-50"></i>
-                    <p>Žádné nářadí</p>
-                    <button class="btn btn-primary" onclick="showAddEquipmentModal()">
-                        <i class="fas fa-plus me-1"></i>Přidat nářadí
-                    </button>
-                </div>
-            `;
-            return;
-        }
-        
-        let html = `
-            <div class="table-responsive">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Název</th>
-                            <th>Kategorie</th>
-                            <th>Stav</th>
-                            <th>Umístění</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
-        
-        equipment.forEach(item => {
-            html += `
-                <tr>
-                    <td>
-                        <div class="fw-semibold">${escapeHtml(item.name || '')}</div>
-                        <small class="text-muted">${escapeHtml(item.manufacturer || '')} ${escapeHtml(item.model || '')}</small>
-                    </td>
-                    <td>${escapeHtml(item.category || '')}</td>
-                    <td><span class="badge bg-success">K dispozici</span></td>
-                    <td>${escapeHtml(item.location || 'Neuvedeno')}</td>
-                </tr>
-            `;
-        });
-        
-        html += '</tbody></table></div>';
-        container.innerHTML = html;
-    }
-
-    function updateMaterialsTable() {
-        const container = document.getElementById('materialsTable');
-        if (!container) return;
-        
-        const materials = window.appState.data.materials;
-        
-        if (materials.length === 0) {
-            container.innerHTML = `
-                <div class="text-center text-muted py-4">
-                    <i class="fas fa-boxes fa-3x mb-3 opacity-50"></i>
-                    <p>Žádné materiály</p>
-                    <button class="btn btn-primary" onclick="showAddMaterialModal()">
-                        <i class="fas fa-plus me-1"></i>Přidat materiál
-                    </button>
-                </div>
-            `;
-            return;
-        }
-        
-        let html = `
-            <div class="table-responsive">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Název</th>
-                            <th>Kategorie</th>
-                            <th>Jednotka</th>
-                            <th>Dodavatel</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
-        
-        materials.forEach(material => {
-            html += `
-                <tr>
-                    <td>
-                        <div class="fw-semibold">${escapeHtml(material.name || '')}</div>
-                        <small class="text-muted">${escapeHtml(material.code || '')}</small>
-                    </td>
-                    <td>${escapeHtml(material.category || '')}</td>
-                    <td>${escapeHtml(material.unit || '')}</td>
-                    <td>${escapeHtml(material.preferred_supplier || 'Neuvedeno')}</td>
-                </tr>
-            `;
-        });
-        
-        html += '</tbody></table></div>';
-        container.innerHTML = html;
-    }
-
-    // SETUP AUTH
-    function setupSimpleAuth() {
-        if (!window.supabaseClient) return;
-        
-        window.supabaseClient.auth.onAuthStateChange(async (event, session) => {
-            console.log('Auth event:', event);
-            
-            if (event === 'SIGNED_IN' && session?.user) {
-                console.log('✅ User signed in, reloading...');
-                location.reload();
-                
-            } else if (event === 'SIGNED_OUT') {
-                console.log('🔐 User signed out, reloading...');
-                location.reload();
-            }
-        });
-    }
-
-    // SETUP LOGIN HANDLERS
-    function setupLoginHandlers() {
-        const signInForm = document.getElementById('signInForm');
-        if (signInForm) {
-            signInForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                
-                const email = document.getElementById('loginEmail').value;
-                const password = document.getElementById('loginPassword').value;
-                
-                try {
-                    showAuthMessage('Přihlašování...', 'info');
-                    
-                    const { error } = await window.supabaseClient.auth.signInWithPassword({
-                        email: email,
-                        password: password
-                    });
-                    
-                    if (error) throw error;
-                    
-                } catch (error) {
-                    console.error('Login error:', error);
-                    showAuthMessage('Chyba při přihlášení: ' + error.message, 'error');
-                }
-            });
-        }
-        
-        const signUpForm = document.getElementById('signUpForm');
-        if (signUpForm) {
-            signUpForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                
-                const name = document.getElementById('registerName').value;
-                const email = document.getElementById('registerEmail').value;
-                const password = document.getElementById('registerPassword').value;
-                
-                try {
-                    showAuthMessage('Registrace...', 'info');
-                    
-                    const { error } = await window.supabaseClient.auth.signUp({
-                        email: email,
-                        password: password,
-                        options: {
-                            data: { full_name: name }
-                        }
-                    });
-                    
-                    if (error) throw error;
-                    
-                    showAuthMessage('Registrace úspěšná! Zkontrolujte email.', 'success');
-                    showLoginForm();
-                    
-                } catch (error) {
-                    console.error('Register error:', error);
-                    showAuthMessage('Chyba při registraci: ' + error.message, 'error');
-                }
-            });
-        }
-    }
-
-    // BASIC MODALS
-    function setupBasicModals() {
-        // Jednoduché modaly - zatím jen alert
-        window.showAddProjectModal = () => alert('Modal pro přidání projektu bude brzy dostupný');
-        window.showAddInvoiceModal = () => alert('Modal pro přidání faktury bude brzy dostupný');
-        window.showAddTransactionModal = (type) => alert(`Modal pro přidání ${type === 'income' ? 'příjmu' : 'výdaje'} bude brzy dostupný`);
-        window.showAddEmployeeModal = () => alert('Modal pro přidání zaměstnance bude brzy dostupný');
-        window.showAddEquipmentModal = () => alert('Modal pro přidání nářadí bude brzy dostupný');
-        window.showAddMaterialModal = () => alert('Modal pro přidání materiálu bude brzy dostupný');
-        window.showNotifications = () => alert('Notifikace budou brzy dostupné');
-    }
-
-    // UTILITY FUNCTIONS
+    // UTILITY FUNKCE PRO ERROR HANDLING
     function showLoading() {
-        document.getElementById('loadingScreen').style.display = 'flex';
+        const loadingEl = document.getElementById('loadingScreen');
+        if (loadingEl) {
+            loadingEl.style.display = 'flex';
+        }
     }
 
     function hideLoading() {
-        document.getElementById('loadingScreen').style.display = 'none';
+        const loadingEl = document.getElementById('loadingScreen');
+        if (loadingEl) {
+            loadingEl.style.display = 'none';
+        }
     }
 
     function showError(message) {
         hideLoading();
-        document.body.innerHTML = `
-            <div class="container mt-5">
-                <div class="alert alert-danger">
-                    <h4>Chyba</h4>
-                    <p>${message}</p>
-                    <button class="btn btn-primary" onclick="location.reload()">Obnovit</button>
+        
+        // Vytvořit error screen
+        const errorHTML = `
+            <div class="container-fluid h-100">
+                <div class="row h-100 justify-content-center align-items-center">
+                    <div class="col-md-6 text-center">
+                        <div class="card">
+                            <div class="card-body p-5">
+                                <i class="fas fa-exclamation-triangle fa-4x text-danger mb-4"></i>
+                                <h3 class="text-danger mb-3">Chyba aplikace</h3>
+                                <p class="text-muted mb-4">${escapeHtml(message)}</p>
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-primary btn-lg" onclick="location.reload()">
+                                        <i class="fas fa-redo me-2"></i>Obnovit stránku
+                                    </button>
+                                    <button class="btn btn-outline-secondary" onclick="showErrorDetails('${escapeHtml(message)}')">
+                                        <i class="fas fa-info-circle me-2"></i>Zobrazit detaily
+                                    </button>
+                                </div>
+                                <div id="errorDetails" class="mt-4 text-start" style="display: none;">
+                                    <h6>Technické detaily:</h6>
+                                    <pre class="bg-light p-3 rounded text-small">${escapeHtml(message)}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
-    }
-
-    function showAuthMessage(message, type) {
-        const msgEl = document.getElementById('authMessage');
-        if (!msgEl) return;
-
-        msgEl.style.display = 'block';
         
-        let className = 'alert ';
-        switch(type) {
-            case 'success': className += 'alert-success'; break;
-            case 'error': className += 'alert-danger'; break;
-            case 'info': className += 'alert-info'; break;
-            default: className += 'alert-secondary';
-        }
-        
-        msgEl.className = className;
-        msgEl.textContent = message;
-
-        if (type === 'success' || type === 'info') {
-            setTimeout(() => {
-                msgEl.style.display = 'none';
-            }, 5000);
-        }
+        document.body.innerHTML = errorHTML;
     }
 
-    function updateElement(id, value) {
-        const element = document.getElementById(id);
-        if (element) {
-            element.textContent = value;
+    function showErrorDetails(message) {
+        const details = document.getElementById('errorDetails');
+        if (details) {
+            details.style.display = details.style.display === 'none' ? 'block' : 'none';
         }
-    }
-
-    function formatCurrency(amount) {
-        if (!amount) return '0,00 Kč';
-        return new Intl.NumberFormat('cs-CZ', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        }).format(amount) + ' Kč';
-    }
-
-    function formatDate(dateString) {
-        if (!dateString) return '-';
-        return new Date(dateString).toLocaleDateString('cs-CZ');
     }
 
     function escapeHtml(text) {
@@ -1399,47 +797,143 @@
         return div.innerHTML;
     }
 
-    // GLOBAL FUNCTIONS
+    // GLOBÁLNÍ FUNKCE PRO HTML ONCLICK HANDLERY
     function navigateTo(page, linkElement) {
-        window.location.hash = page;
+        if (window.NavigationManager) {
+            window.NavigationManager.navigateTo(page, linkElement);
+        } else {
+            // Fallback pro případ, že NavigationManager není dostupný
+            window.location.hash = page;
+        }
     }
 
     function toggleSidebar() {
-        const sidebar = document.getElementById('sidebar');
-        const mainContent = document.getElementById('mainContent');
-        
-        if (sidebar && mainContent) {
-            sidebar.classList.toggle('collapsed');
-            mainContent.classList.toggle('sidebar-collapsed');
+        if (window.NavigationManager) {
+            window.NavigationManager.toggleSidebar();
+        } else {
+            // Fallback
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('mainContent');
+            if (sidebar && mainContent) {
+                sidebar.classList.toggle('collapsed');
+                mainContent.classList.toggle('sidebar-collapsed');
+            }
         }
     }
 
     function showRegisterForm() {
-        document.getElementById('loginForm').style.display = 'none';
-        document.getElementById('registerForm').style.display = 'block';
-        document.getElementById('authMessage').style.display = 'none';
-    }
-
-    function showLoginForm() {
-        document.getElementById('registerForm').style.display = 'none';
-        document.getElementById('loginForm').style.display = 'block';
-        document.getElementById('authMessage').style.display = 'none';
-    }
-
-    function signOut() {
-        if (window.supabaseClient) {
-            window.supabaseClient.auth.signOut();
+        if (window.AuthManager) {
+            window.AuthManager.showRegisterForm();
+        } else {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = 'block';
         }
     }
 
-    // Make functions global
+    function showLoginForm() {
+        if (window.AuthManager) {
+            window.AuthManager.showLoginForm();
+        } else {
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('loginForm').style.display = 'block';
+        }
+    }
+
+    function signOut() {
+        if (window.AuthManager) {
+            window.AuthManager.signOut();
+        } else {
+            // Fallback
+            if (window.supabaseClient) {
+                window.supabaseClient.auth.signOut();
+            }
+        }
+    }
+
+    // MODÁLNÍ OKNA - FALLBACK IMPLEMENTACE
+    function showAddProjectModal() {
+        if (window.ModalManager) {
+            window.ModalManager.showAddProjectModal();
+        } else {
+            alert('Funkce pro přidání projektu bude brzy dostupná');
+        }
+    }
+
+    function showAddInvoiceModal() {
+        if (window.ModalManager) {
+            window.ModalManager.showAddInvoiceModal();
+        } else {
+            alert('Funkce pro vystavení faktury bude brzy dostupná');
+        }
+    }
+
+    function showAddTransactionModal(type) {
+        if (window.ModalManager) {
+            window.ModalManager.showAddTransactionModal(type);
+        } else {
+            const typeText = type === 'income' ? 'příjmu' : 'výdaje';
+            alert(`Funkce pro přidání ${typeText} bude brzy dostupná`);
+        }
+    }
+
+    function showAddEmployeeModal() {
+        if (window.ModalManager) {
+            window.ModalManager.showAddEmployeeModal();
+        } else {
+            alert('Funkce pro přidání zaměstnance bude brzy dostupná');
+        }
+    }
+
+    function showAddEquipmentModal() {
+        if (window.ModalManager) {
+            window.ModalManager.showAddEquipmentModal();
+        } else {
+            alert('Funkce pro přidání nářadí bude brzy dostupná');
+        }
+    }
+
+    function showAddMaterialModal() {
+        if (window.ModalManager) {
+            window.ModalManager.showAddMaterialModal();
+        } else {
+            alert('Funkce pro přidání materiálu bude brzy dostupná');
+        }
+    }
+
+    function showNotifications() {
+        if (window.ModalManager) {
+            window.ModalManager.showNotifications();
+        } else {
+            alert('Notifikace budou brzy dostupné');
+        }
+    }
+
+    // VYSTAVIT GLOBÁLNÍ FUNKCE
     window.navigateTo = navigateTo;
     window.toggleSidebar = toggleSidebar;
     window.showRegisterForm = showRegisterForm;
     window.showLoginForm = showLoginForm;
     window.signOut = signOut;
+    window.showAddProjectModal = showAddProjectModal;
+    window.showAddInvoiceModal = showAddInvoiceModal;
+    window.showAddTransactionModal = showAddTransactionModal;
+    window.showAddEmployeeModal = showAddEmployeeModal;
+    window.showAddEquipmentModal = showAddEquipmentModal;
+    window.showAddMaterialModal = showAddMaterialModal;
+    window.showNotifications = showNotifications;
+    window.showErrorDetails = showErrorDetails;
 
-    console.log('✅ Simple init script loaded');
+    // ERROR HANDLING
+    window.addEventListener('error', function(event) {
+        console.error('Global JavaScript error:', event.error);
+    });
+
+    window.addEventListener('unhandledrejection', function(event) {
+        console.error('Unhandled promise rejection:', event.reason);
+        event.preventDefault();
+    });
+
+    console.log('✅ AstraCore initialization script loaded');
     </script>
 </body>
 </html>
