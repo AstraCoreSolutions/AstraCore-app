@@ -13,6 +13,7 @@ const useAuthStore = create(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      initialized: false,
       
       // Actions
       setUser: (user) => {
@@ -40,65 +41,108 @@ const useAuthStore = create(
       
       // Initialize auth listener
       initialize: async () => {
+        const { initialized } = get()
+        if (initialized) {
+          debugLog('Auth already initialized')
+          return
+        }
+        
         debugLog('Initializing auth store...')
         set({ isLoading: true, error: null })
         
         try {
-          // Get current session
-          const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+          // Add timeout to prevent infinite loading
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Initialization timeout after 10 seconds')), 10000)
+          })
           
-          if (sessionError) throw sessionError
-          
-          if (session?.user) {
-            debugLog('Found existing session')
-            await get().handleAuthChange('SIGNED_IN', session)
-          } else {
-            debugLog('No existing session')
-            set({ isLoading: false })
+          const initPromise = async () => {
+            // Get current session
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+            
+            if (sessionError) throw sessionError
+            
+            if (session?.user) {
+              debugLog('Found existing session for user:', session.user.email)
+              set({ 
+                user: session.user, 
+                isAuthenticated: true,
+                isLoading: false,
+                initialized: true
+              })
+              
+              // Load profile separately without blocking initialization
+              get().loadProfile(session.user.id).catch(error => {
+                debugError('Failed to load profile during init:', error)
+              })
+              
+            } else {
+              debugLog('No existing session found')
+              set({ 
+                isLoading: false,
+                initialized: true 
+              })
+            }
           }
           
-          // Listen for auth changes
+          await Promise.race([initPromise(), timeoutPromise])
+          
+          // Listen for auth changes AFTER successful initialization
           supabase.auth.onAuthStateChange(async (event, session) => {
             debugLog('Auth state changed:', event)
-            await get().handleAuthChange(event, session)
+            try {
+              await get().handleAuthChange(event, session)
+            } catch (error) {
+              debugError('Error in auth state change handler:', error)
+            }
           })
           
         } catch (error) {
           debugError('Failed to initialize auth:', error)
-          set({ error: error.message, isLoading: false })
+          set({ 
+            error: error.message, 
+            isLoading: false,
+            initialized: true // Mark as initialized even on error to prevent retries
+          })
         }
       },
       
       // Handle auth state changes
       handleAuthChange: async (event, session) => {
-        set({ isLoading: true, error: null })
+        debugLog('Handling auth change:', event, session?.user?.email)
         
         try {
           if (event === 'SIGNED_IN' && session?.user) {
-            // Set user
-            set({ user: session.user, isAuthenticated: true })
+            set({ 
+              user: session.user, 
+              isAuthenticated: true,
+              error: null
+            })
             
-            // Load user profile
+            // Load profile
             await get().loadProfile(session.user.id)
             
           } else if (event === 'SIGNED_OUT') {
-            // Clear user data
             set({ 
               user: null, 
               profile: null, 
-              isAuthenticated: false 
+              isAuthenticated: false,
+              error: null
             })
           }
         } catch (error) {
           debugError('Error handling auth change:', error)
           set({ error: error.message })
-        } finally {
-          set({ isLoading: false })
         }
       },
       
       // Load user profile from database
       loadProfile: async (userId) => {
+        if (!userId) {
+          debugError('No userId provided to loadProfile')
+          return
+        }
+        
         try {
           debugLog('Loading profile for user:', userId)
           
@@ -118,12 +162,13 @@ const useAuthStore = create(
             throw error
           }
           
-          debugLog('Profile loaded:', profile)
+          debugLog('Profile loaded successfully:', profile?.email)
           set({ profile })
           
         } catch (error) {
           debugError('Failed to load profile:', error)
-          set({ error: error.message })
+          // Don't set error state for profile loading failures during init
+          // set({ error: error.message })
         }
       },
       
@@ -131,7 +176,12 @@ const useAuthStore = create(
       createDefaultProfile: async (userId) => {
         try {
           const { user } = get()
-          if (!user) return
+          if (!user) {
+            debugError('No user found for creating default profile')
+            return
+          }
+          
+          debugLog('Creating default profile for user:', user.email)
           
           const defaultProfile = {
             id: userId,
@@ -141,6 +191,7 @@ const useAuthStore = create(
             role: USER_ROLES.EMPLOYEE, // Default role
             avatar_url: null,
             phone: null,
+            position: null,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           }
@@ -153,7 +204,7 @@ const useAuthStore = create(
           
           if (error) throw error
           
-          debugLog('Default profile created:', profile)
+          debugLog('Default profile created successfully')
           set({ profile })
           
         } catch (error) {
@@ -167,14 +218,17 @@ const useAuthStore = create(
         set({ isLoading: true, error: null })
         
         try {
+          debugLog('Attempting sign in for:', email)
+          
           const { data, error } = await supabase.auth.signInWithPassword({
-            email,
+            email: email.trim(),
             password
           })
           
           if (error) throw error
           
           debugLog('Sign in successful')
+          set({ isLoading: false })
           return { success: true }
           
         } catch (error) {
@@ -210,65 +264,11 @@ const useAuthStore = create(
           if (error) throw error
           
           debugLog('Sign out successful')
+          set({ isLoading: false })
           return { success: true }
           
         } catch (error) {
           debugError('Sign out failed:', error)
-          set({ error: error.message, isLoading: false })
-          return { success: false, error: error.message }
-        }
-      },
-      
-      // Create new user (admin only)
-      createUser: async (userData) => {
-        set({ isLoading: true, error: null })
-        
-        try {
-          const { profile } = get()
-          
-          // Check if current user is admin
-          if (!profile || profile.role !== USER_ROLES.ADMIN) {
-            throw new Error('Nemáte oprávnění vytvářet uživatele')
-          }
-          
-          // Create auth user
-          const { data, error: authError } = await supabase.auth.admin.createUser({
-            email: userData.email,
-            password: userData.password,
-            email_confirm: true,
-            user_metadata: {
-              first_name: userData.first_name,
-              last_name: userData.last_name
-            }
-          })
-          
-          if (authError) throw authError
-          
-          // Create profile
-          const profileData = {
-            id: data.user.id,
-            email: userData.email,
-            first_name: userData.first_name,
-            last_name: userData.last_name,
-            role: userData.role,
-            phone: userData.phone || null,
-            position: userData.position || null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-          
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert([profileData])
-          
-          if (profileError) throw profileError
-          
-          debugLog('User created successfully:', data.user.id)
-          set({ isLoading: false })
-          return { success: true, user: data.user }
-          
-        } catch (error) {
-          debugError('Failed to create user:', error)
           set({ error: error.message, isLoading: false })
           return { success: false, error: error.message }
         }
@@ -296,7 +296,7 @@ const useAuthStore = create(
           
           if (error) throw error
           
-          debugLog('Profile updated:', data)
+          debugLog('Profile updated successfully')
           set({ profile: data, isLoading: false })
           return { success: true }
           
