@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button, Table, Card, Input, Modal, ActionButton } from '../../components/ui'
-import { formatDate } from '../../utils/helpers'
+import { formatDate, formatCurrency } from '../../utils/helpers'
+import { supabase } from '../../config/supabase'
 import toast from 'react-hot-toast'
 
 const ClientsPage = () => {
@@ -18,7 +19,7 @@ const ClientsPage = () => {
     search: ''
   })
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm({
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm({
     defaultValues: {
       name: '',
       type: 'company',
@@ -34,69 +35,40 @@ const ClientsPage = () => {
     }
   })
 
-  // Mock data - replace with real API calls
-  useEffect(() => {
-    const mockClients = [
-      {
-        id: 1,
-        name: 'Stavební firma ABC s.r.o.',
-        type: 'company',
-        email: 'info@stavebni-abc.cz',
-        phone: '+420 555 123 456',
-        ico: '12345678',
-        dic: 'CZ12345678',
-        address: 'Průmyslová 123',
-        city: 'Praha',
-        postal_code: '110 00',
-        contact_person: 'Ing. Petr Novák',
-        notes: 'Dlouhodobý partner, přednostní klient',
-        projects_count: 15,
-        total_revenue: 2500000,
-        last_project: '2024-01-10',
-        created_at: '2023-01-15T10:00:00Z'
-      },
-      {
-        id: 2,
-        name: 'Developer XYZ a.s.',
-        type: 'company',
-        email: 'zakky@developer-xyz.cz',
-        phone: '+420 555 987 654',
-        ico: '87654321',
-        dic: 'CZ87654321',
-        address: 'Náměstí Míru 45',
-        city: 'Brno',
-        postal_code: '602 00',
-        contact_person: 'Mgr. Jana Svobodová',
-        notes: 'Specializace na bytové domy',
-        projects_count: 8,
-        total_revenue: 1800000,
-        last_project: '2024-01-15',
-        created_at: '2023-03-20T14:30:00Z'
-      },
-      {
-        id: 3,
-        name: 'František Novák',
-        type: 'individual',
-        email: 'f.novak@email.cz',
-        phone: '+420 777 555 333',
-        ico: null,
-        dic: null,
-        address: 'Rodinná 89',
-        city: 'Ostrava',
-        postal_code: '700 00',
-        contact_person: null,
-        notes: 'Stavba rodinného domu',
-        projects_count: 1,
-        total_revenue: 450000,
-        last_project: '2023-12-05',
-        created_at: '2023-11-01T09:15:00Z'
-      }
-    ]
+  const watchType = watch('type')
 
-    setTimeout(() => {
-      setClients(mockClients)
+  // Load clients from Supabase
+  const loadClients = async () => {
+    try {
+      setIsLoading(true)
+      const { data, error } = await supabase
+        .from('clients')
+        .select(`
+          *,
+          projects:projects(count)
+        `)
+        .order('name')
+
+      if (error) throw error
+
+      // Calculate projects count and total revenue
+      const clientsWithStats = data?.map(client => ({
+        ...client,
+        projects_count: client.projects?.[0]?.count || 0,
+        total_revenue: 0 // TODO: Calculate from projects/invoices
+      })) || []
+
+      setClients(clientsWithStats)
+    } catch (error) {
+      console.error('Error loading clients:', error)
+      toast.error('Chyba při načítání klientů')
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
+  }
+
+  useEffect(() => {
+    loadClients()
   }, [])
 
   useEffect(() => {
@@ -148,38 +120,50 @@ const ClientsPage = () => {
   const onSubmit = async (data) => {
     setSubmitting(true)
     try {
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      const newClient = {
+      const clientData = {
         ...data,
-        id: editingClient ? editingClient.id : Date.now(),
-        projects_count: editingClient?.projects_count || 0,
-        total_revenue: editingClient?.total_revenue || 0,
-        last_project: editingClient?.last_project || null,
-        created_at: editingClient?.created_at || new Date().toISOString()
+        // Clean up company-specific fields for individuals
+        ...(data.type === 'individual' && {
+          ico: null,
+          dic: null,
+          contact_person: null
+        })
       }
 
+      let result
       if (editingClient) {
-        setClients(prev => prev.map(c => c.id === editingClient.id ? newClient : c))
-        toast.success('Klient upraven')
+        // Update existing client
+        result = await supabase
+          .from('clients')
+          .update(clientData)
+          .eq('id', editingClient.id)
+          .select()
       } else {
-        setClients(prev => [newClient, ...prev])
-        toast.success('Klient přidán')
+        // Create new client
+        result = await supabase
+          .from('clients')
+          .insert([clientData])
+          .select()
       }
+
+      if (result.error) throw result.error
+
+      toast.success(editingClient ? 'Klient byl aktualizován' : 'Klient byl přidán')
       
-      handleCloseModal()
+      // Reload clients
+      await loadClients()
+      
+      // Reset form and close modal
+      reset()
+      setShowAddModal(false)
+      setEditingClient(null)
+      
     } catch (error) {
-      toast.error('Chyba při ukládání')
+      console.error('Error saving client:', error)
+      toast.error('Chyba při ukládání klienta')
     } finally {
       setSubmitting(false)
     }
-  }
-
-  const handleCloseModal = () => {
-    setShowAddModal(false)
-    setEditingClient(null)
-    reset()
   }
 
   const handleEdit = (client) => {
@@ -197,16 +181,30 @@ const ClientsPage = () => {
 
     setDeleteLoading(true)
     try {
-      await new Promise(resolve => setTimeout(resolve, 500))
-      setClients(prev => prev.filter(c => c.id !== clientToDelete.id))
-      toast.success('Klient smazán')
+      const { error } = await supabase
+        .from('clients')
+        .delete()
+        .eq('id', clientToDelete.id)
+
+      if (error) throw error
+
+      toast.success('Klient byl smazán')
+      await loadClients()
       setShowDeleteModal(false)
       setClientToDelete(null)
+      
     } catch (error) {
-      toast.error('Chyba při mazání')
+      console.error('Error deleting client:', error)
+      toast.error('Chyba při mazání klienta')
     } finally {
       setDeleteLoading(false)
     }
+  }
+
+  const handleAddNew = () => {
+    setEditingClient(null)
+    reset()
+    setShowAddModal(true)
   }
 
   const filteredClients = getFilteredClients()
@@ -218,19 +216,9 @@ const ClientsPage = () => {
       title: 'Klient',
       render: (value, row) => (
         <div>
-          <div className="font-semibold text-gray-900">{value}</div>
+          <div className="font-medium text-gray-900">{value}</div>
           <div className="text-sm text-gray-500">
-            {row.type === 'company' ? (
-              <>
-                <i className="fas fa-building mr-1" />
-                Firma • IČO: {row.ico}
-              </>
-            ) : (
-              <>
-                <i className="fas fa-user mr-1" />
-                Fyzická osoba
-              </>
-            )}
+            {row.type === 'company' ? 'Firma' : 'Fyzická osoba'}
           </div>
         </div>
       )
@@ -240,21 +228,40 @@ const ClientsPage = () => {
       title: 'Kontakt',
       render: (_, row) => (
         <div>
-          <div className="text-sm">{row.email || '-'}</div>
-          <div className="text-sm text-gray-500">{row.phone || '-'}</div>
-          {row.contact_person && (
-            <div className="text-xs text-gray-400">{row.contact_person}</div>
+          {row.email && (
+            <div className="text-sm text-gray-900">{row.email}</div>
+          )}
+          {row.phone && (
+            <div className="text-sm text-gray-500">{row.phone}</div>
           )}
         </div>
       )
     },
     {
       key: 'location',
-      title: 'Místo',
+      title: 'Lokace',
       render: (_, row) => (
         <div>
-          <div className="text-sm">{row.city}</div>
-          <div className="text-xs text-gray-500">{row.postal_code}</div>
+          {row.city && (
+            <div className="text-sm text-gray-900">{row.city}</div>
+          )}
+          {row.postal_code && (
+            <div className="text-sm text-gray-500">{row.postal_code}</div>
+          )}
+        </div>
+      )
+    },
+    {
+      key: 'ico',
+      title: 'IČO/DIČ',
+      render: (_, row) => (
+        <div>
+          {row.ico && (
+            <div className="text-sm text-gray-900">IČO: {row.ico}</div>
+          )}
+          {row.dic && (
+            <div className="text-sm text-gray-500">DIČ: {row.dic}</div>
+          )}
         </div>
       )
     },
@@ -268,11 +275,6 @@ const ClientsPage = () => {
       )
     },
     {
-      key: 'last_project',
-      title: 'Poslední projekt',
-      render: (value) => value ? formatDate(value) : '-'
-    },
-    {
       key: 'actions',
       title: 'Akce',
       render: (_, row) => (
@@ -280,12 +282,12 @@ const ClientsPage = () => {
           <ActionButton
             icon="fas fa-eye"
             tooltip="Zobrazit detail"
-            onClick={() => console.log('View client', row)}
+            onClick={() => console.log('View client details', row)}
           />
           <ActionButton
-            icon="fas fa-project-diagram"
+            icon="fas fa-building"
             tooltip="Projekty klienta"
-            onClick={() => console.log('View projects', row)}
+            onClick={() => console.log('View client projects', row)}
             variant="ghost"
           />
           <ActionButton
@@ -312,78 +314,68 @@ const ClientsPage = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Klienti</h1>
-          <p className="text-gray-600">CRM a správa klientských vztahů</p>
+          <p className="text-gray-600 mt-1">Správa klientů a zákazníků</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Button
-            variant="outline"
-            onClick={() => console.log('Import clients')}
-            icon="fas fa-upload"
-          >
-            Import
-          </Button>
-          <Button
-            onClick={() => setShowAddModal(true)}
-            icon="fas fa-plus"
-          >
-            Přidat klienta
-          </Button>
-        </div>
+        <Button onClick={handleAddNew} className="bg-primary-600 hover:bg-primary-700">
+          <i className="fas fa-plus mr-2" />
+          Přidat klienta
+        </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-users text-blue-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Celkem klientů</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-building text-green-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Firmy</p>
-              <p className="text-2xl font-bold text-green-600">{stats.companies}</p>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Celkem klientů</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-users text-blue-600" />
+              </div>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-user text-yellow-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Fyzické osoby</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.individuals}</p>
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Firmy</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.companies}</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-building text-green-600" />
+              </div>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-coins text-purple-600 text-xl" />
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Fyzické osoby</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.individuals}</p>
+              </div>
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-user text-purple-600" />
+              </div>
             </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Celkové tržby</p>
-              <p className="text-lg font-bold text-purple-600">
-                {new Intl.NumberFormat('cs-CZ', {
-                  style: 'currency',
-                  currency: 'CZK',
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 0
-                }).format(stats.totalRevenue)}
-              </p>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Celkový obrat</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.totalRevenue)}</p>
+              </div>
+              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-coins text-yellow-600" />
+              </div>
             </div>
           </div>
         </Card>
@@ -391,33 +383,27 @@ const ClientsPage = () => {
 
       {/* Filters */}
       <Card>
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Filtry</h2>
-        </div>
         <div className="p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Filtry</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
-              type="text"
-              placeholder="Hledat klienty..."
+              placeholder="Hledat klienta..."
               value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
               icon="fas fa-search"
             />
-            
-            <Input
-              type="select"
+            <select
               value={filters.type}
-              onChange={(e) => setFilters({ ...filters, type: e.target.value })}
+              onChange={(e) => setFilters(prev => ({ ...prev, type: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               <option value="">Všechny typy</option>
               <option value="company">Firmy</option>
               <option value="individual">Fyzické osoby</option>
-            </Input>
-
+            </select>
             <Button
               variant="outline"
-              onClick={() => setFilters({ search: '', type: '' })}
-              size="sm"
+              onClick={() => setFilters({ type: '', search: '' })}
             >
               Vymazat filtry
             </Button>
@@ -427,190 +413,170 @@ const ClientsPage = () => {
 
       {/* Clients Table */}
       <Card>
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Seznam klientů ({filteredClients.length})
-            </h2>
-            <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" icon="fas fa-download">
-                Export
-              </Button>
-            </div>
+        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Seznam klientů ({filteredClients.length})
+          </h3>
+          <div className="flex space-x-2">
+            <Button variant="outline" size="sm">
+              <i className="fas fa-download mr-2" />
+              Export
+            </Button>
+            <Button variant="outline" size="sm">
+              <i className="fas fa-upload mr-2" />
+              Import
+            </Button>
           </div>
         </div>
-        
         <Table
-          columns={columns}
           data={filteredClients}
+          columns={columns}
           loading={isLoading}
           emptyMessage="Žádní klienti nenalezeni"
-          emptyIcon="fas fa-user-tie"
         />
       </Card>
 
-      {/* Add/Edit Client Modal */}
+      {/* Add/Edit Modal */}
       <Modal
         isOpen={showAddModal}
-        onClose={handleCloseModal}
+        onClose={() => {
+          setShowAddModal(false)
+          setEditingClient(null)
+          reset()
+        }}
         title={editingClient ? 'Upravit klienta' : 'Nový klient'}
         size="lg"
-        footer={
-          <>
+      >
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Název/Jméno *"
+              {...register('name', { required: 'Název je povinný' })}
+              error={errors.name?.message}
+            />
+            <select
+              {...register('type')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="company">Firma</option>
+              <option value="individual">Fyzická osoba</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="E-mail"
+              type="email"
+              {...register('email')}
+            />
+            <Input
+              label="Telefon"
+              {...register('phone')}
+            />
+          </div>
+
+          {watchType === 'company' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="IČO"
+                {...register('ico')}
+              />
+              <Input
+                label="DIČ"
+                {...register('dic')}
+              />
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Input
+              label="Adresa"
+              {...register('address')}
+            />
+            <Input
+              label="Město"
+              {...register('city')}
+            />
+            <Input
+              label="PSČ"
+              {...register('postal_code')}
+            />
+          </div>
+
+          {watchType === 'company' && (
+            <Input
+              label="Kontaktní osoba"
+              {...register('contact_person')}
+            />
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Poznámky
+            </label>
+            <textarea
+              {...register('notes')}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              placeholder="Dodatečné informace o klientovi..."
+            />
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
             <Button
+              type="button"
               variant="outline"
-              onClick={handleCloseModal}
-              disabled={submitting}
+              onClick={() => {
+                setShowAddModal(false)
+                setEditingClient(null)
+                reset()
+              }}
             >
               Zrušit
             </Button>
             <Button
-              onClick={handleSubmit(onSubmit)}
+              type="submit"
               loading={submitting}
-              icon="fas fa-save"
+              className="bg-primary-600 hover:bg-primary-700"
             >
               {editingClient ? 'Uložit změny' : 'Přidat klienta'}
             </Button>
-          </>
-        }
-      >
-        <form className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              {...register('name', { required: 'Název/jméno je povinné' })}
-              label="Název firmy / Jméno a příjmení"
-              type="text"
-              placeholder="Stavební firma ABC s.r.o."
-              error={errors.name?.message}
-              required
-            />
-            
-            <Input
-              {...register('type')}
-              label="Typ klienta"
-              type="select"
-            >
-              <option value="company">Firma</option>
-              <option value="individual">Fyzická osoba</option>
-            </Input>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              {...register('email')}
-              label="E-mail"
-              type="email"
-              placeholder="info@firma.cz"
-            />
-            
-            <Input
-              {...register('phone')}
-              label="Telefon"
-              type="tel"
-              placeholder="+420 555 123 456"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              {...register('ico')}
-              label="IČO"
-              type="text"
-              placeholder="12345678"
-            />
-            
-            <Input
-              {...register('dic')}
-              label="DIČ"
-              type="text"
-              placeholder="CZ12345678"
-            />
-          </div>
-
-          <Input
-            {...register('address')}
-            label="Adresa"
-            type="text"
-            placeholder="Průmyslová 123"
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              {...register('city')}
-              label="Město"
-              type="text"
-              placeholder="Praha"
-            />
-            
-            <Input
-              {...register('postal_code')}
-              label="PSČ"
-              type="text"
-              placeholder="110 00"
-            />
-          </div>
-
-          <Input
-            {...register('contact_person')}
-            label="Kontaktní osoba"
-            type="text"
-            placeholder="Ing. Petr Novák"
-          />
-
-          <Input
-            {...register('notes')}
-            label="Poznámky"
-            type="textarea"
-            rows={3}
-            placeholder="Dodatečné informace o klientovi..."
-          />
         </form>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Modal */}
       <Modal
         isOpen={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
+        onClose={() => {
+          setShowDeleteModal(false)
+          setClientToDelete(null)
+        }}
         title="Smazat klienta"
         size="sm"
-        footer={
-          <>
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            Opravdu chcete smazat klienta "{clientToDelete?.name}"? Tato akce je nevratná.
+          </p>
+          <div className="flex justify-end space-x-3">
             <Button
               variant="outline"
-              onClick={() => setShowDeleteModal(false)}
-              disabled={deleteLoading}
+              onClick={() => {
+                setShowDeleteModal(false)
+                setClientToDelete(null)
+              }}
             >
               Zrušit
             </Button>
             <Button
               variant="danger"
-              onClick={handleDelete}
               loading={deleteLoading}
+              onClick={handleDelete}
             >
               Smazat
             </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div className="flex items-center space-x-3 text-red-600">
-            <i className="fas fa-exclamation-triangle text-2xl" />
-            <div>
-              <p className="font-medium">Opravdu chcete smazat tohoto klienta?</p>
-              <p className="text-sm text-gray-600 mt-1">
-                Tato akce je nevratná a smaže všechna související data.
-              </p>
-            </div>
           </div>
-          
-          {clientToDelete && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="font-medium text-gray-900">{clientToDelete.name}</p>
-              <p className="text-sm text-gray-600 mt-1">
-                {clientToDelete.projects_count} projektů • {clientToDelete.email}
-              </p>
-            </div>
-          )}
         </div>
       </Modal>
     </div>
