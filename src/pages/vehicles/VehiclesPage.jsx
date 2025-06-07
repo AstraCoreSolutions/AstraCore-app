@@ -3,10 +3,12 @@ import { useForm } from 'react-hook-form'
 import { Button, Table, Card, Input, Modal, StatusBadge, ActionButton, CurrencyCell, DateCell } from '../../components/ui'
 import { VEHICLE_STATUS, STATUS_LABELS, STATUS_COLORS } from '../../utils/constants'
 import { formatCurrency, formatDate } from '../../utils/helpers'
+import { supabase } from '../../config/supabase'
 import toast from 'react-hot-toast'
 
 const VehiclesPage = () => {
   const [vehicles, setVehicles] = useState([])
+  const [employees, setEmployees] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingVehicle, setEditingVehicle] = useState(null)
@@ -41,87 +43,72 @@ const VehiclesPage = () => {
     }
   })
 
-  // Mock data - replace with real API calls
-  useEffect(() => {
-    const mockVehicles = [
-      {
-        id: 1,
-        name: 'Dodávka Mercedes Sprinter',
-        type: 'van',
-        brand: 'Mercedes-Benz',
-        model: 'Sprinter 316 CDI',
-        year: 2020,
-        license_plate: '1A2 3456',
-        vin: 'WDB9061451234567',
-        fuel_type: 'diesel',
-        status: VEHICLE_STATUS.ACTIVE,
-        purchase_date: '2020-03-15',
-        purchase_price: 850000,
-        current_value: 650000,
-        insurance_expiry: '2024-12-31',
-        stk_expiry: '2024-06-15',
-        assigned_to: 'Jan Dvořák',
-        notes: 'Hlavní pracovní vozidlo, dobný stav',
-        mileage: 95000,
-        last_service: '2023-12-10',
-        next_service: '2024-06-10',
-        fuel_consumption: 8.5,
-        monthly_costs: 15000
-      },
-      {
-        id: 2,
-        name: 'Nákladní auto Iveco',
-        type: 'truck',
-        brand: 'Iveco',
-        model: 'Daily 35S14',
-        year: 2019,
-        license_plate: '2B4 7890',
-        vin: 'ZCFC351A201234567',
-        fuel_type: 'diesel',
-        status: VEHICLE_STATUS.ACTIVE,
-        purchase_date: '2019-08-20',
-        purchase_price: 1200000,
-        current_value: 800000,
-        insurance_expiry: '2024-11-30',
-        stk_expiry: '2024-08-20',
-        assigned_to: 'Tomáš Svoboda',
-        notes: 'Pro přepravu těžkých materiálů',
-        mileage: 120000,
-        last_service: '2024-01-05',
-        next_service: '2024-07-05',
-        fuel_consumption: 12.0,
-        monthly_costs: 18000
-      },
-      {
-        id: 3,
-        name: 'Osobní auto Škoda Octavia',
-        type: 'car',
-        brand: 'Škoda',
-        model: 'Octavia Combi 2.0 TDI',
-        year: 2021,
-        license_plate: '3C5 1234',
-        vin: 'TMBJF71Z6L1234567',
-        fuel_type: 'diesel',
-        status: VEHICLE_STATUS.SERVICE,
-        purchase_date: '2021-05-10',
-        purchase_price: 650000,
-        current_value: 480000,
-        insurance_expiry: '2024-10-15',
-        stk_expiry: '2025-05-10',
-        assigned_to: null,
-        notes: 'V servisu - výměna spojky',
-        mileage: 65000,
-        last_service: '2024-01-15',
-        next_service: '2024-07-15',
-        fuel_consumption: 5.2,
-        monthly_costs: 8000
-      }
-    ]
+  const vehicleTypes = [
+    { value: 'car', label: 'Osobní auto' },
+    { value: 'van', label: 'Dodávka' },
+    { value: 'truck', label: 'Nákladní auto' },
+    { value: 'trailer', label: 'Přívěs' },
+    { value: 'machinery', label: 'Stavební stroj' },
+    { value: 'other', label: 'Ostatní' }
+  ]
 
-    setTimeout(() => {
-      setVehicles(mockVehicles)
+  const fuelTypes = [
+    { value: 'petrol', label: 'Benzín' },
+    { value: 'diesel', label: 'Nafta' },
+    { value: 'electric', label: 'Elektřina' },
+    { value: 'hybrid', label: 'Hybrid' },
+    { value: 'lpg', label: 'LPG' },
+    { value: 'other', label: 'Ostatní' }
+  ]
+
+  // Load vehicles from Supabase
+  const loadVehicles = async () => {
+    try {
+      setIsLoading(true)
+      const { data, error } = await supabase
+        .from('vehicles')
+        .select(`
+          *,
+          assigned_user:profiles!vehicles_assigned_to_fkey(first_name, last_name)
+        `)
+        .order('name')
+
+      if (error) throw error
+
+      const vehiclesWithDetails = data?.map(vehicle => ({
+        ...vehicle,
+        assigned_to_name: vehicle.assigned_user 
+          ? `${vehicle.assigned_user.first_name} ${vehicle.assigned_user.last_name}`.trim()
+          : null
+      })) || []
+
+      setVehicles(vehiclesWithDetails)
+    } catch (error) {
+      console.error('Error loading vehicles:', error)
+      toast.error('Chyba při načítání vozového parku')
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
+  }
+
+  // Load employees for assignment dropdown
+  const loadEmployees = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .order('first_name')
+
+      if (error) throw error
+      setEmployees(data || [])
+    } catch (error) {
+      console.error('Error loading employees:', error)
+    }
+  }
+
+  useEffect(() => {
+    loadVehicles()
+    loadEmployees()
   }, [])
 
   useEffect(() => {
@@ -156,7 +143,7 @@ const VehiclesPage = () => {
           vehicle.brand,
           vehicle.model,
           vehicle.license_plate,
-          vehicle.assigned_to
+          vehicle.assigned_to_name
         ].filter(Boolean)
         
         const matchesSearch = searchFields.some(field => 
@@ -180,43 +167,67 @@ const VehiclesPage = () => {
     return { total, active, inService, totalValue, monthlyCosts }
   }
 
+  const getExpiringDocuments = () => {
+    const now = new Date()
+    const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+    
+    return vehicles.filter(vehicle => {
+      const insuranceExpiry = vehicle.insurance_expiry ? new Date(vehicle.insurance_expiry) : null
+      const stkExpiry = vehicle.stk_expiry ? new Date(vehicle.stk_expiry) : null
+      
+      return (insuranceExpiry && insuranceExpiry <= thirtyDaysFromNow) ||
+             (stkExpiry && stkExpiry <= thirtyDaysFromNow)
+    })
+  }
+
   const onSubmit = async (data) => {
     setSubmitting(true)
     try {
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      const newVehicle = {
+      const vehicleData = {
         ...data,
-        id: editingVehicle ? editingVehicle.id : Date.now(),
         year: parseInt(data.year) || new Date().getFullYear(),
         purchase_price: parseFloat(data.purchase_price) || 0,
         current_value: parseFloat(data.current_value) || 0,
-        mileage: editingVehicle?.mileage || 0,
-        monthly_costs: editingVehicle?.monthly_costs || 0,
-        created_at: editingVehicle?.created_at || new Date().toISOString()
+        assigned_to: data.assigned_to || null,
+        purchase_date: data.purchase_date || null,
+        insurance_expiry: data.insurance_expiry || null,
+        stk_expiry: data.stk_expiry || null
       }
 
+      let result
       if (editingVehicle) {
-        setVehicles(prev => prev.map(v => v.id === editingVehicle.id ? newVehicle : v))
-        toast.success('Vozidlo upraveno')
+        // Update existing vehicle
+        result = await supabase
+          .from('vehicles')
+          .update(vehicleData)
+          .eq('id', editingVehicle.id)
+          .select()
       } else {
-        setVehicles(prev => [newVehicle, ...prev])
-        toast.success('Vozidlo přidáno')
+        // Create new vehicle
+        result = await supabase
+          .from('vehicles')
+          .insert([vehicleData])
+          .select()
       }
+
+      if (result.error) throw result.error
+
+      toast.success(editingVehicle ? 'Vozidlo bylo aktualizováno' : 'Vozidlo bylo přidáno')
       
-      handleCloseModal()
+      // Reload vehicles
+      await loadVehicles()
+      
+      // Reset form and close modal
+      reset()
+      setShowAddModal(false)
+      setEditingVehicle(null)
+      
     } catch (error) {
-      toast.error('Chyba při ukládání')
+      console.error('Error saving vehicle:', error)
+      toast.error('Chyba při ukládání vozidla')
     } finally {
       setSubmitting(false)
     }
-  }
-
-  const handleCloseModal = () => {
-    setShowAddModal(false)
-    setEditingVehicle(null)
-    reset()
   }
 
   const handleEdit = (vehicle) => {
@@ -234,32 +245,55 @@ const VehiclesPage = () => {
 
     setDeleteLoading(true)
     try {
-      await new Promise(resolve => setTimeout(resolve, 500))
-      setVehicles(prev => prev.filter(v => v.id !== vehicleToDelete.id))
-      toast.success('Vozidlo smazáno')
+      const { error } = await supabase
+        .from('vehicles')
+        .delete()
+        .eq('id', vehicleToDelete.id)
+
+      if (error) throw error
+
+      toast.success('Vozidlo bylo smazáno')
+      await loadVehicles()
       setShowDeleteModal(false)
       setVehicleToDelete(null)
+      
     } catch (error) {
-      toast.error('Chyba při mazání')
+      console.error('Error deleting vehicle:', error)
+      toast.error('Chyba při mazání vozidla')
     } finally {
       setDeleteLoading(false)
     }
   }
 
+  const handleAddNew = () => {
+    setEditingVehicle(null)
+    reset()
+    setShowAddModal(true)
+  }
+
   const filteredVehicles = getFilteredVehicles()
   const stats = getVehicleStats()
+  const expiringDocs = getExpiringDocuments()
 
   const columns = [
     {
-      key: 'vehicle',
+      key: 'name',
       title: 'Vozidlo',
-      render: (_, row) => (
+      render: (value, row) => (
         <div>
-          <div className="font-semibold text-gray-900">{row.name}</div>
+          <div className="font-medium text-gray-900">{value}</div>
           <div className="text-sm text-gray-500">
             {row.brand} {row.model} ({row.year})
           </div>
-          <div className="text-xs text-gray-400 font-mono">{row.license_plate}</div>
+        </div>
+      )
+    },
+    {
+      key: 'license_plate',
+      title: 'SPZ',
+      render: (value) => (
+        <div className="font-mono text-sm bg-gray-100 px-2 py-1 rounded inline-block">
+          {value}
         </div>
       )
     },
@@ -267,56 +301,62 @@ const VehiclesPage = () => {
       key: 'type',
       title: 'Typ',
       render: (value) => {
-        const typeLabels = {
-          car: 'Osobní',
-          van: 'Dodávka',
-          truck: 'Nákladní',
-          machinery: 'Stroj'
-        }
-        return typeLabels[value] || value
+        const type = vehicleTypes.find(t => t.value === value)
+        return type?.label || value
       }
     },
     {
       key: 'status',
       title: 'Stav',
-      render: (value, row) => (
-        <div>
-          <StatusBadge 
-            status={value}
-            statusLabels={STATUS_LABELS}
-            statusColors={STATUS_COLORS}
-          />
-          {row.assigned_to && (
-            <div className="text-xs text-gray-500 mt-1">
-              Přidělen: {row.assigned_to}
-            </div>
-          )}
-        </div>
+      render: (value) => (
+        <StatusBadge 
+          status={value}
+          statusLabels={STATUS_LABELS}
+          statusColors={STATUS_COLORS}
+        />
       )
     },
     {
-      key: 'mileage',
-      title: 'Najeto',
-      render: (value) => value ? `${value.toLocaleString('cs-CZ')} km` : '-'
-    },
-    {
-      key: 'stk_expiry',
-      title: 'STK do',
-      render: (value) => {
-        if (!value) return '-'
-        const isExpiring = new Date(value) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-        return (
-          <span className={isExpiring ? 'text-red-600 font-medium' : ''}>
-            {formatDate(value)}
-            {isExpiring && <i className="fas fa-exclamation-triangle ml-1 text-red-500" />}
-          </span>
-        )
-      }
+      key: 'assigned_to_name',
+      title: 'Přiřazeno',
+      render: (value) => value || (
+        <span className="text-gray-400 italic">Nepřiřazeno</span>
+      )
     },
     {
       key: 'current_value',
-      title: 'Současná hodnota',
+      title: 'Hodnota',
       render: (value) => <CurrencyCell amount={value} />
+    },
+    {
+      key: 'expiry_status',
+      title: 'Platnost dokladů',
+      render: (_, row) => {
+        const now = new Date()
+        const thirtyDays = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+        
+        const insuranceExpiry = row.insurance_expiry ? new Date(row.insurance_expiry) : null
+        const stkExpiry = row.stk_expiry ? new Date(row.stk_expiry) : null
+        
+        const insuranceExpiring = insuranceExpiry && insuranceExpiry <= thirtyDays
+        const stkExpiring = stkExpiry && stkExpiry <= thirtyDays
+        
+        if (insuranceExpiring || stkExpiring) {
+          return (
+            <div className="text-red-600">
+              <i className="fas fa-exclamation-triangle mr-1" />
+              Expiruje
+            </div>
+          )
+        }
+        
+        return (
+          <div className="text-green-600">
+            <i className="fas fa-check-circle mr-1" />
+            V pořádku
+          </div>
+        )
+      }
     },
     {
       key: 'actions',
@@ -324,18 +364,21 @@ const VehiclesPage = () => {
       render: (_, row) => (
         <div className="flex items-center space-x-2">
           <ActionButton
+            icon="fas fa-eye"
+            tooltip="Zobrazit detail"
+            onClick={() => console.log('View vehicle details', row)}
+          />
+          <ActionButton
             icon="fas fa-gas-pump"
             tooltip="Tankování"
             onClick={() => console.log('Add fuel record', row)}
             variant="ghost"
-            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
           />
           <ActionButton
             icon="fas fa-wrench"
             tooltip="Servis"
-            onClick={() => console.log('Service record', row)}
+            onClick={() => console.log('Add service record', row)}
             variant="ghost"
-            className="text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50"
           />
           <ActionButton
             icon="fas fa-edit"
@@ -355,110 +398,107 @@ const VehiclesPage = () => {
     }
   ]
 
-  const vehicleTypes = [
-    { value: 'car', label: 'Osobní auto' },
-    { value: 'van', label: 'Dodávka' },
-    { value: 'truck', label: 'Nákladní auto' },
-    { value: 'machinery', label: 'Stavební stroj' }
-  ]
-
-  const fuelTypes = [
-    { value: 'petrol', label: 'Benzín' },
-    { value: 'diesel', label: 'Nafta' },
-    { value: 'electric', label: 'Elektřina' },
-    { value: 'hybrid', label: 'Hybrid' }
-  ]
-
-  const statusOptions = [
-    { value: '', label: 'Všechny stavy' },
-    { value: VEHICLE_STATUS.ACTIVE, label: STATUS_LABELS[VEHICLE_STATUS.ACTIVE] },
-    { value: VEHICLE_STATUS.SERVICE, label: STATUS_LABELS[VEHICLE_STATUS.SERVICE] },
-    { value: VEHICLE_STATUS.RETIRED, label: STATUS_LABELS[VEHICLE_STATUS.RETIRED] }
-  ]
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Vozový park</h1>
-          <p className="text-gray-600">Správa vozidel, tankování a servisu</p>
+          <p className="text-gray-600 mt-1">Správa vozidel a strojů</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Button
-            variant="outline"
-            onClick={() => console.log('Add fuel record')}
-            icon="fas fa-gas-pump"
-          >
-            Tankování
-          </Button>
-          <Button
-            onClick={() => setShowAddModal(true)}
-            icon="fas fa-plus"
-          >
-            Přidat vozidlo
-          </Button>
-        </div>
+        <Button onClick={handleAddNew} className="bg-primary-600 hover:bg-primary-700">
+          <i className="fas fa-plus mr-2" />
+          Přidat vozidlo
+        </Button>
       </div>
 
+      {/* Expiring Documents Alert */}
+      {expiringDocs.length > 0 && (
+        <Card className="border-red-200 bg-red-50">
+          <div className="p-4">
+            <div className="flex items-center">
+              <i className="fas fa-exclamation-triangle text-red-600 mr-3" />
+              <div>
+                <h3 className="text-red-800 font-medium">
+                  Upozornění: Expirující doklady
+                </h3>
+                <p className="text-red-700 text-sm">
+                  {expiringDocs.length} vozidel má expirující pojištění nebo STK do 30 dní
+                </p>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-car text-blue-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Celkem vozidel</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-check-circle text-green-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Aktivní</p>
-              <p className="text-2xl font-bold text-green-600">{stats.active}</p>
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Celkem vozidel</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-car text-blue-600" />
+              </div>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-wrench text-yellow-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">V servisu</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.inService}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-coins text-purple-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Celková hodnota</p>
-              <p className="text-lg font-bold text-purple-600">{formatCurrency(stats.totalValue)}</p>
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Aktivní</p>
+                <p className="text-2xl font-bold text-green-600">{stats.active}</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-check-circle text-green-600" />
+              </div>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-calendar text-red-600 text-xl" />
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">V servisu</p>
+                <p className="text-2xl font-bold text-red-600">{stats.inService}</p>
+              </div>
+              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-wrench text-red-600" />
+              </div>
             </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Měsíční náklady</p>
-              <p className="text-lg font-bold text-red-600">{formatCurrency(stats.monthlyCosts)}</p>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Celková hodnota</p>
+                <p className="text-xl font-bold text-gray-900">{formatCurrency(stats.totalValue)}</p>
+              </div>
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-coins text-purple-600" />
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Měsíční náklady</p>
+                <p className="text-xl font-bold text-gray-900">{formatCurrency(stats.monthlyCosts)}</p>
+              </div>
+              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-chart-line text-yellow-600" />
+              </div>
             </div>
           </div>
         </Card>
@@ -466,48 +506,38 @@ const VehiclesPage = () => {
 
       {/* Filters */}
       <Card>
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Filtry</h2>
-        </div>
         <div className="p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Filtry</h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Input
-              type="text"
-              placeholder="Hledat vozidla..."
+              placeholder="Hledat vozidlo..."
               value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
               icon="fas fa-search"
             />
-            
-            <Input
-              type="select"
+            <select
               value={filters.type}
-              onChange={(e) => setFilters({ ...filters, type: e.target.value })}
+              onChange={(e) => setFilters(prev => ({ ...prev, type: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               <option value="">Všechny typy</option>
               {vehicleTypes.map(type => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
+                <option key={type.value} value={type.value}>{type.label}</option>
               ))}
-            </Input>
-
-            <Input
-              type="select"
+            </select>
+            <select
               value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+              onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
-              {statusOptions.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Input>
-
+              <option value="">Všechny stavy</option>
+              <option value={VEHICLE_STATUS.ACTIVE}>{STATUS_LABELS[VEHICLE_STATUS.ACTIVE]}</option>
+              <option value={VEHICLE_STATUS.SERVICE}>{STATUS_LABELS[VEHICLE_STATUS.SERVICE]}</option>
+              <option value={VEHICLE_STATUS.RETIRED}>{STATUS_LABELS[VEHICLE_STATUS.RETIRED]}</option>
+            </select>
             <Button
               variant="outline"
-              onClick={() => setFilters({ search: '', type: '', status: '' })}
-              size="sm"
+              onClick={() => setFilters({ type: '', status: '', search: '' })}
             >
               Vymazat filtry
             </Button>
@@ -517,253 +547,222 @@ const VehiclesPage = () => {
 
       {/* Vehicles Table */}
       <Card>
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Vozový park ({filteredVehicles.length})
-            </h2>
-            <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" icon="fas fa-download">
-                Export
-              </Button>
-              <Button variant="outline" size="sm" icon="fas fa-chart-line">
-                Reporty
-              </Button>
-            </div>
+        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Vozidla ({filteredVehicles.length})
+          </h3>
+          <div className="flex space-x-2">
+            <Button variant="outline" size="sm">
+              <i className="fas fa-download mr-2" />
+              Export
+            </Button>
+            <Button variant="outline" size="sm">
+              <i className="fas fa-upload mr-2" />
+              Import
+            </Button>
           </div>
         </div>
-        
         <Table
+          data={filteredVehicles}
           columns={columns}
-          data={filteredVehicles.map(vehicle => ({
-            ...vehicle,
-            _highlight: vehicle.stk_expiry && new Date(vehicle.stk_expiry) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-          }))}
           loading={isLoading}
           emptyMessage="Žádná vozidla nenalezena"
-          emptyIcon="fas fa-car"
         />
       </Card>
 
-      {/* Add/Edit Vehicle Modal */}
+      {/* Add/Edit Modal */}
       <Modal
         isOpen={showAddModal}
-        onClose={handleCloseModal}
+        onClose={() => {
+          setShowAddModal(false)
+          setEditingVehicle(null)
+          reset()
+        }}
         title={editingVehicle ? 'Upravit vozidlo' : 'Nové vozidlo'}
         size="lg"
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={handleCloseModal}
-              disabled={submitting}
-            >
-              Zrušit
-            </Button>
-            <Button
-              onClick={handleSubmit(onSubmit)}
-              loading={submitting}
-              icon="fas fa-save"
-            >
-              {editingVehicle ? 'Uložit změny' : 'Přidat vozidlo'}
-            </Button>
-          </>
-        }
       >
-        <form className="space-y-6">
-          <Input
-            {...register('name', { required: 'Název vozidla je povinný' })}
-            label="Název vozidla"
-            type="text"
-            placeholder="Dodávka Mercedes Sprinter"
-            error={errors.name?.message}
-            required
-          />
-
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
+              label="Název vozidla *"
+              {...register('name', { required: 'Název je povinný' })}
+              error={errors.name?.message}
+            />
+            <select
               {...register('type', { required: 'Typ je povinný' })}
-              label="Typ vozidla"
-              type="select"
-              error={errors.type?.message}
-              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
             >
               <option value="">Vyberte typ</option>
               {vehicleTypes.map(type => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
+                <option key={type.value} value={type.value}>{type.label}</option>
               ))}
-            </Input>
-            
-            <Input
-              {...register('fuel_type')}
-              label="Typ paliva"
-              type="select"
-            >
-              {fuelTypes.map(fuel => (
-                <option key={fuel.value} value={fuel.value}>
-                  {fuel.label}
-                </option>
-              ))}
-            </Input>
+            </select>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
-              {...register('brand')}
               label="Značka"
-              type="text"
-              placeholder="Mercedes-Benz"
+              {...register('brand')}
             />
-            
             <Input
-              {...register('model')}
               label="Model"
-              type="text"
-              placeholder="Sprinter 316 CDI"
+              {...register('model')}
             />
-            
             <Input
-              {...register('year')}
               label="Rok výroby"
               type="number"
               min="1900"
               max={new Date().getFullYear() + 1}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              {...register('license_plate', { required: 'SPZ je povinná' })}
-              label="SPZ"
-              type="text"
-              placeholder="1A2 3456"
-              error={errors.license_plate?.message}
-              required
-            />
-            
-            <Input
-              {...register('vin')}
-              label="VIN"
-              type="text"
-              placeholder="WDB9061451234567"
+              {...register('year')}
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
-              {...register('purchase_date')}
+              label="SPZ *"
+              {...register('license_plate', { required: 'SPZ je povinná' })}
+              error={errors.license_plate?.message}
+              placeholder="1A2 3456"
+            />
+            <Input
+              label="VIN"
+              {...register('vin')}
+            />
+            <select
+              {...register('fuel_type')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            >
+              {fuelTypes.map(fuel => (
+                <option key={fuel.value} value={fuel.value}>{fuel.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Input
               label="Datum nákupu"
               type="date"
+              {...register('purchase_date')}
             />
-            
             <Input
-              {...register('purchase_price')}
-              label="Pořizovací cena"
+              label="Nákupní cena"
               type="number"
               step="0.01"
-              placeholder="0.00"
-              suffix="Kč"
+              {...register('purchase_price')}
             />
-            
             <Input
-              {...register('current_value')}
               label="Současná hodnota"
               type="number"
               step="0.01"
-              placeholder="0.00"
-              suffix="Kč"
+              {...register('current_value')}
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
-              {...register('insurance_expiry')}
               label="Pojištění do"
               type="date"
+              {...register('insurance_expiry')}
             />
-            
             <Input
-              {...register('stk_expiry')}
               label="STK do"
               type="date"
+              {...register('stk_expiry')}
             />
+            <select
+              {...register('status')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            >
+              <option value={VEHICLE_STATUS.ACTIVE}>{STATUS_LABELS[VEHICLE_STATUS.ACTIVE]}</option>
+              <option value={VEHICLE_STATUS.SERVICE}>{STATUS_LABELS[VEHICLE_STATUS.SERVICE]}</option>
+              <option value={VEHICLE_STATUS.RETIRED}>{STATUS_LABELS[VEHICLE_STATUS.RETIRED]}</option>
+            </select>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              {...register('status')}
-              label="Stav"
-              type="select"
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Přiřazeno zaměstnanci
+            </label>
+            <select
+              {...register('assigned_to')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
             >
-              {statusOptions.slice(1).map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+              <option value="">Nepřiřazeno</option>
+              {employees.map(employee => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.first_name} {employee.last_name}
                 </option>
               ))}
-            </Input>
-            
-            <Input
-              {...register('assigned_to')}
-              label="Přiděleno"
-              type="text"
-              placeholder="Jan Novák"
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Poznámky
+            </label>
+            <textarea
+              {...register('notes')}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              placeholder="Dodatečné informace o vozidle..."
             />
           </div>
 
-          <Input
-            {...register('notes')}
-            label="Poznámky"
-            type="textarea"
-            rows={3}
-            placeholder="Dodatečné informace o vozidle..."
-          />
+          <div className="flex justify-end space-x-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowAddModal(false)
+                setEditingVehicle(null)
+                reset()
+              }}
+            >
+              Zrušit
+            </Button>
+            <Button
+              type="submit"
+              loading={submitting}
+              className="bg-primary-600 hover:bg-primary-700"
+            >
+              {editingVehicle ? 'Uložit změny' : 'Přidat vozidlo'}
+            </Button>
+          </div>
         </form>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Modal */}
       <Modal
         isOpen={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
+        onClose={() => {
+          setShowDeleteModal(false)
+          setVehicleToDelete(null)
+        }}
         title="Smazat vozidlo"
         size="sm"
-        footer={
-          <>
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            Opravdu chcete smazat vozidlo "{vehicleToDelete?.name}"? Tato akce je nevratná.
+          </p>
+          <div className="flex justify-end space-x-3">
             <Button
               variant="outline"
-              onClick={() => setShowDeleteModal(false)}
-              disabled={deleteLoading}
+              onClick={() => {
+                setShowDeleteModal(false)
+                setVehicleToDelete(null)
+              }}
             >
               Zrušit
             </Button>
             <Button
               variant="danger"
-              onClick={handleDelete}
               loading={deleteLoading}
+              onClick={handleDelete}
             >
               Smazat
             </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div className="flex items-center space-x-3 text-red-600">
-            <i className="fas fa-exclamation-triangle text-2xl" />
-            <div>
-              <p className="font-medium">Opravdu chcete smazat toto vozidlo?</p>
-              <p className="text-sm text-gray-600 mt-1">Tato akce je nevratná.</p>
-            </div>
           </div>
-          
-          {vehicleToDelete && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="font-medium text-gray-900">{vehicleToDelete.name}</p>
-              <p className="text-sm text-gray-600 mt-1">
-                {vehicleToDelete.brand} {vehicleToDelete.model} • {vehicleToDelete.license_plate}
-              </p>
-            </div>
-          )}
         </div>
       </Modal>
     </div>
