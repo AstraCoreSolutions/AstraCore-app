@@ -1,33 +1,27 @@
 import React, { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import useEmployeesStore from '../../store/employeesStore'
-import useAuthStore from '../../store/authStore'
-import { Button, Table, Card, Input, Modal, StatusBadge, ActionButton, CurrencyCell, DateCell } from '../../components/ui'
+import { Button, Table, Card, Input, Modal, StatusBadge, ActionButton, CurrencyCell } from '../../components/ui'
 import { EMPLOYEE_STATUS, STATUS_LABELS, STATUS_COLORS } from '../../utils/constants'
-import { formatCurrency, formatDate } from '../../utils/helpers'
+import { formatDate, formatCurrency } from '../../utils/helpers'
+import { supabase } from '../../config/supabase'
+import useAuthStore from '../../store/authStore'
 import toast from 'react-hot-toast'
 
 const EmployeesPage = () => {
-  const { profile } = useAuthStore()
-  const { 
-    employees, 
-    loadEmployees, 
-    addEmployee,
-    updateEmployee,
-    deleteEmployee,
-    filters, 
-    setFilters, 
-    getFilteredEmployees,
-    getEmployeeStats,
-    isLoading 
-  } = useEmployeesStore()
-
+  const { user } = useAuthStore()
+  const [employees, setEmployees] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingEmployee, setEditingEmployee] = useState(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [employeeToDelete, setEmployeeToDelete] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [filters, setFilters] = useState({
+    status: '',
+    position: '',
+    search: ''
+  })
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm({
     defaultValues: {
@@ -36,15 +30,63 @@ const EmployeesPage = () => {
       email: '',
       phone: '',
       position: '',
-      start_date: new Date().toISOString().split('T')[0],
+      start_date: '',
       hourly_rate: '',
+      status: EMPLOYEE_STATUS.ACTIVE,
       notes: ''
     }
   })
 
+  const positions = [
+    'Vedoucí stavby',
+    'Stavbyvedoucí',
+    'Mistr',
+    'Zedník',
+    'Tesař',
+    'Elektrikář',
+    'Instalatér',
+    'Pomocný pracovník',
+    'Řidič',
+    'Administrativní pracovník',
+    'Ostatní'
+  ]
+
+  // Load employees from Supabase
+  const loadEmployees = async () => {
+    try {
+      setIsLoading(true)
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(`
+          *,
+          attendance_records:attendance(count),
+          projects_assigned:project_assignments(count)
+        `)
+        .neq('id', user?.id) // Exclude current user
+        .order('first_name')
+
+      if (error) throw error
+
+      const employeesWithStats = data?.map(employee => ({
+        ...employee,
+        attendance_count: employee.attendance_records?.[0]?.count || 0,
+        projects_count: employee.projects_assigned?.[0]?.count || 0,
+        full_name: `${employee.first_name || ''} ${employee.last_name || ''}`.trim(),
+        status: employee.status || EMPLOYEE_STATUS.ACTIVE
+      })) || []
+
+      setEmployees(employeesWithStats)
+    } catch (error) {
+      console.error('Error loading employees:', error)
+      toast.error('Chyba při načítání zaměstnanců')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   useEffect(() => {
     loadEmployees()
-  }, [loadEmployees])
+  }, [user?.id])
 
   useEffect(() => {
     if (editingEmployee) {
@@ -58,34 +100,94 @@ const EmployeesPage = () => {
     }
   }, [editingEmployee, setValue])
 
-  const filteredEmployees = getFilteredEmployees()
-  const stats = getEmployeeStats()
+  const getFilteredEmployees = () => {
+    return employees.filter(employee => {
+      // Status filter
+      if (filters.status && employee.status !== filters.status) {
+        return false
+      }
+      
+      // Position filter
+      if (filters.position && employee.position !== filters.position) {
+        return false
+      }
+      
+      // Search filter
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase()
+        const searchFields = [
+          employee.first_name,
+          employee.last_name,
+          employee.email,
+          employee.phone,
+          employee.position
+        ].filter(Boolean)
+        
+        const matchesSearch = searchFields.some(field => 
+          field.toLowerCase().includes(searchLower)
+        )
+        
+        if (!matchesSearch) return false
+      }
+      
+      return true
+    })
+  }
+
+  const getEmployeeStats = () => {
+    const total = employees.length
+    const active = employees.filter(e => e.status === EMPLOYEE_STATUS.ACTIVE).length
+    const inactive = employees.filter(e => e.status === EMPLOYEE_STATUS.INACTIVE).length
+    const avgHourlyRate = employees.length > 0 
+      ? employees.reduce((sum, e) => sum + (e.hourly_rate || 0), 0) / employees.length 
+      : 0
+
+    return { total, active, inactive, avgHourlyRate }
+  }
 
   const onSubmit = async (data) => {
     setSubmitting(true)
     try {
-      let result
-      if (editingEmployee) {
-        result = await updateEmployee(editingEmployee.id, data)
-      } else {
-        result = await addEmployee(data, profile.id)
+      const employeeData = {
+        ...data,
+        hourly_rate: parseFloat(data.hourly_rate) || 0,
+        start_date: data.start_date || null,
+        role: 'employee' // Default role
       }
 
-      if (result.success) {
-        toast.success(editingEmployee ? 'Zaměstnanec upraven' : 'Zaměstnanec přidán')
-        handleCloseModal()
+      let result
+      if (editingEmployee) {
+        // Update existing employee
+        result = await supabase
+          .from('profiles')
+          .update(employeeData)
+          .eq('id', editingEmployee.id)
+          .select()
       } else {
-        toast.error(result.error || 'Chyba při ukládání')
+        // For new employees, we would typically create a user account first
+        // This is a simplified version - in real app, you'd need proper user creation
+        toast.info('Vytvoření nového zaměstnance vyžaduje registraci uživatelského účtu')
+        return
       }
+
+      if (result.error) throw result.error
+
+      toast.success('Zaměstnanec byl aktualizován')
+      
+      // Reload employees
+      await loadEmployees()
+      
+      // Reset form and close modal
+      reset()
+      setShowAddModal(false)
+      setEditingEmployee(null)
+      
+    } catch (error) {
+      console.error('Error saving employee:', error)
+      toast.error('Chyba při ukládání zaměstnance')
     } finally {
       setSubmitting(false)
     }
-  }
-
-  const handleCloseModal = () => {
-    setShowAddModal(false)
-    setEditingEmployee(null)
-    reset()
   }
 
   const handleEdit = (employee) => {
@@ -103,27 +205,61 @@ const EmployeesPage = () => {
 
     setDeleteLoading(true)
     try {
-      const result = await deleteEmployee(employeeToDelete.id)
-      if (result.success) {
-        toast.success('Zaměstnanec smazán')
-        setShowDeleteModal(false)
-        setEmployeeToDelete(null)
-      }
+      // In a real app, you might want to deactivate instead of delete
+      const { error } = await supabase
+        .from('profiles')
+        .update({ status: EMPLOYEE_STATUS.TERMINATED })
+        .eq('id', employeeToDelete.id)
+
+      if (error) throw error
+
+      toast.success('Zaměstnanec byl deaktivován')
+      await loadEmployees()
+      setShowDeleteModal(false)
+      setEmployeeToDelete(null)
+      
+    } catch (error) {
+      console.error('Error deactivating employee:', error)
+      toast.error('Chyba při deaktivaci zaměstnance')
     } finally {
       setDeleteLoading(false)
     }
   }
 
+  const handleViewAttendance = (employee) => {
+    // Navigate to attendance page for specific employee
+    toast.info(`Docházka pro ${employee.full_name}`)
+  }
+
+  const handleViewDetail = (employee) => {
+    // Navigate to employee detail page
+    toast.info(`Detail zaměstnance ${employee.full_name}`)
+  }
+
+  const handleAddNew = () => {
+    setEditingEmployee(null)
+    reset()
+    setShowAddModal(true)
+  }
+
+  const filteredEmployees = getFilteredEmployees()
+  const stats = getEmployeeStats()
+
   const columns = [
     {
-      key: 'name',
+      key: 'full_name',
       title: 'Jméno',
       render: (_, row) => (
-        <div>
-          <div className="font-semibold text-gray-900">
-            {`${row.first_name} ${row.last_name}`}
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+            <span className="text-sm font-medium text-gray-600">
+              {row.first_name?.[0]}{row.last_name?.[0]}
+            </span>
           </div>
-          <div className="text-sm text-gray-500">{row.position || '-'}</div>
+          <div>
+            <div className="font-medium text-gray-900">{row.full_name}</div>
+            <div className="text-sm text-gray-500">{row.position}</div>
+          </div>
         </div>
       )
     },
@@ -132,31 +268,44 @@ const EmployeesPage = () => {
       title: 'Kontakt',
       render: (_, row) => (
         <div>
-          <div className="text-sm">{row.email || '-'}</div>
-          <div className="text-sm text-gray-500">{row.phone || '-'}</div>
+          {row.email && (
+            <div className="text-sm text-gray-900">{row.email}</div>
+          )}
+          {row.phone && (
+            <div className="text-sm text-gray-500">{row.phone}</div>
+          )}
         </div>
       )
+    },
+    {
+      key: 'start_date',
+      title: 'Nástup',
+      render: (value) => value ? formatDate(value) : '-'
+    },
+    {
+      key: 'hourly_rate',
+      title: 'Hodinová sazba',
+      render: (value) => value ? <CurrencyCell amount={value} /> : '-'
     },
     {
       key: 'status',
       title: 'Stav',
       render: (value) => (
         <StatusBadge 
-          status={value || EMPLOYEE_STATUS.ACTIVE}
+          status={value}
           statusLabels={STATUS_LABELS}
           statusColors={STATUS_COLORS}
         />
       )
     },
     {
-      key: 'start_date',
-      title: 'Datum nástupu',
-      render: (value) => <DateCell date={value} />
-    },
-    {
-      key: 'hourly_rate',
-      title: 'Hodinová sazba',
-      render: (value) => value ? <CurrencyCell amount={value} /> : '-'
+      key: 'projects_count',
+      title: 'Projekty',
+      render: (value) => (
+        <div className="text-center">
+          <span className="text-lg font-semibold text-gray-900">{value || 0}</span>
+        </div>
+      )
     },
     {
       key: 'actions',
@@ -166,12 +315,12 @@ const EmployeesPage = () => {
           <ActionButton
             icon="fas fa-eye"
             tooltip="Zobrazit detail"
-            onClick={() => console.log('View employee', row)}
+            onClick={() => handleViewDetail(row)}
           />
           <ActionButton
             icon="fas fa-clock"
             tooltip="Docházka"
-            onClick={() => console.log('View attendance', row)}
+            onClick={() => handleViewAttendance(row)}
             variant="ghost"
           />
           <ActionButton
@@ -181,8 +330,8 @@ const EmployeesPage = () => {
             variant="ghost"
           />
           <ActionButton
-            icon="fas fa-trash"
-            tooltip="Smazat"
+            icon="fas fa-user-times"
+            tooltip="Deaktivovat"
             onClick={() => handleDeleteClick(row)}
             variant="ghost"
             className="text-red-600 hover:text-red-700 hover:bg-red-50"
@@ -192,97 +341,74 @@ const EmployeesPage = () => {
     }
   ]
 
-  const positions = [
-    'Vedoucí stavby',
-    'Stavbyvedoucí',
-    'Mistr',
-    'Zedník',
-    'Tesař',
-    'Elektrikář',
-    'Instalatér',
-    'Pomocný pracovník',
-    'Řidič',
-    'Ostatní'
-  ]
-
-  const statusOptions = [
-    { value: '', label: 'Všechny stavy' },
-    { value: EMPLOYEE_STATUS.ACTIVE, label: STATUS_LABELS[EMPLOYEE_STATUS.ACTIVE] },
-    { value: EMPLOYEE_STATUS.INACTIVE, label: STATUS_LABELS[EMPLOYEE_STATUS.INACTIVE] },
-    { value: EMPLOYEE_STATUS.TERMINATED, label: STATUS_LABELS[EMPLOYEE_STATUS.TERMINATED] }
-  ]
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Zaměstnanci</h1>
-          <p className="text-gray-600">Správa týmu a docházky</p>
+          <p className="text-gray-600 mt-1">Správa týmu a zaměstnanců</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Button
-            variant="outline"
-            onClick={() => console.log('Import employees')}
-            icon="fas fa-upload"
-          >
-            Import
-          </Button>
-          <Button
-            onClick={() => setShowAddModal(true)}
-            icon="fas fa-plus"
-          >
-            Přidat zaměstnance
-          </Button>
-        </div>
+        <Button onClick={handleAddNew} className="bg-primary-600 hover:bg-primary-700">
+          <i className="fas fa-plus mr-2" />
+          Přidat zaměstnance
+        </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-users text-blue-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Celkem</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-user-check text-green-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Aktivní</p>
-              <p className="text-2xl font-bold text-green-600">{stats.active}</p>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Celkem zaměstnanců</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-users text-blue-600" />
+              </div>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-user-clock text-yellow-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Neaktivní</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.inactive}</p>
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Aktivní</p>
+                <p className="text-2xl font-bold text-green-600">{stats.active}</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-user-check text-green-600" />
+              </div>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-user-times text-red-600 text-xl" />
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Neaktivní</p>
+                <p className="text-2xl font-bold text-gray-600">{stats.inactive}</p>
+              </div>
+              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-user-times text-gray-600" />
+              </div>
             </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Ukončeno</p>
-              <p className="text-2xl font-bold text-red-600">{stats.terminated}</p>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Průměrná sazba</p>
+                <p className="text-xl font-bold text-gray-900">{formatCurrency(stats.avgHourlyRate)}</p>
+              </div>
+              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-coins text-yellow-600" />
+              </div>
             </div>
           </div>
         </Card>
@@ -290,48 +416,38 @@ const EmployeesPage = () => {
 
       {/* Filters */}
       <Card>
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Filtry</h2>
-        </div>
         <div className="p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Filtry</h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Input
-              type="text"
               placeholder="Hledat zaměstnance..."
               value={filters.search}
-              onChange={(e) => setFilters({ search: e.target.value })}
+              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
               icon="fas fa-search"
             />
-            
-            <Input
-              type="select"
-              value={filters.status}
-              onChange={(e) => setFilters({ status: e.target.value })}
-            >
-              {statusOptions.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Input>
-
-            <Input
-              type="select"
+            <select
               value={filters.position}
-              onChange={(e) => setFilters({ position: e.target.value })}
+              onChange={(e) => setFilters(prev => ({ ...prev, position: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               <option value="">Všechny pozice</option>
               {positions.map(position => (
-                <option key={position} value={position}>
-                  {position}
-                </option>
+                <option key={position} value={position}>{position}</option>
               ))}
-            </Input>
-
+            </select>
+            <select
+              value={filters.status}
+              onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="">Všechny stavy</option>
+              <option value={EMPLOYEE_STATUS.ACTIVE}>{STATUS_LABELS[EMPLOYEE_STATUS.ACTIVE]}</option>
+              <option value={EMPLOYEE_STATUS.INACTIVE}>{STATUS_LABELS[EMPLOYEE_STATUS.INACTIVE]}</option>
+              <option value={EMPLOYEE_STATUS.TERMINATED}>{STATUS_LABELS[EMPLOYEE_STATUS.TERMINATED]}</option>
+            </select>
             <Button
               variant="outline"
-              onClick={() => setFilters({ search: '', status: '', position: '' })}
-              size="sm"
+              onClick={() => setFilters({ status: '', position: '', search: '' })}
             >
               Vymazat filtry
             </Button>
@@ -341,184 +457,182 @@ const EmployeesPage = () => {
 
       {/* Employees Table */}
       <Card>
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Seznam zaměstnanců ({filteredEmployees.length})
-            </h2>
-            <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" icon="fas fa-download">
-                Export
-              </Button>
-              <Button variant="outline" size="sm" icon="fas fa-calendar">
-                Docházka
-              </Button>
-            </div>
+        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Zaměstnanci ({filteredEmployees.length})
+          </h3>
+          <div className="flex space-x-2">
+            <Button variant="outline" size="sm">
+              <i className="fas fa-download mr-2" />
+              Export
+            </Button>
+            <Button variant="outline" size="sm">
+              <i className="fas fa-upload mr-2" />
+              Import
+            </Button>
           </div>
         </div>
-        
         <Table
-          columns={columns}
           data={filteredEmployees}
+          columns={columns}
           loading={isLoading}
           emptyMessage="Žádní zaměstnanci nenalezeni"
-          emptyIcon="fas fa-users"
         />
       </Card>
 
-      {/* Add/Edit Employee Modal */}
+      {/* Add/Edit Modal */}
       <Modal
         isOpen={showAddModal}
-        onClose={handleCloseModal}
+        onClose={() => {
+          setShowAddModal(false)
+          setEditingEmployee(null)
+          reset()
+        }}
         title={editingEmployee ? 'Upravit zaměstnance' : 'Nový zaměstnanec'}
         size="lg"
-        footer={
-          <>
+      >
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {!editingEmployee && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center">
+                <i className="fas fa-info-circle text-blue-600 mr-2" />
+                <p className="text-blue-800 text-sm">
+                  Pro přidání nového zaměstnance je potřeba nejdříve vytvořit uživatelský účet
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Křestní jméno *"
+              {...register('first_name', { required: 'Křestní jméno je povinné' })}
+              error={errors.first_name?.message}
+            />
+            <Input
+              label="Příjmení *"
+              {...register('last_name', { required: 'Příjmení je povinné' })}
+              error={errors.last_name?.message}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="E-mail"
+              type="email"
+              {...register('email')}
+              disabled={!editingEmployee}
+            />
+            <Input
+              label="Telefon"
+              {...register('phone')}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <select
+              {...register('position')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">Vyberte pozici</option>
+              {positions.map(position => (
+                <option key={position} value={position}>{position}</option>
+              ))}
+            </select>
+            <Input
+              label="Datum nástupu"
+              type="date"
+              {...register('start_date')}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Hodinová sazba"
+              type="number"
+              step="0.01"
+              {...register('hourly_rate')}
+              placeholder="0.00"
+            />
+            <select
+              {...register('status')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            >
+              <option value={EMPLOYEE_STATUS.ACTIVE}>{STATUS_LABELS[EMPLOYEE_STATUS.ACTIVE]}</option>
+              <option value={EMPLOYEE_STATUS.INACTIVE}>{STATUS_LABELS[EMPLOYEE_STATUS.INACTIVE]}</option>
+              <option value={EMPLOYEE_STATUS.TERMINATED}>{STATUS_LABELS[EMPLOYEE_STATUS.TERMINATED]}</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Poznámky
+            </label>
+            <textarea
+              {...register('notes')}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              placeholder="Dodatečné informace o zaměstnanci..."
+            />
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
             <Button
+              type="button"
               variant="outline"
-              onClick={handleCloseModal}
-              disabled={submitting}
+              onClick={() => {
+                setShowAddModal(false)
+                setEditingEmployee(null)
+                reset()
+              }}
             >
               Zrušit
             </Button>
             <Button
-              onClick={handleSubmit(onSubmit)}
+              type="submit"
               loading={submitting}
-              icon="fas fa-save"
+              disabled={!editingEmployee}
+              className="bg-primary-600 hover:bg-primary-700"
             >
               {editingEmployee ? 'Uložit změny' : 'Přidat zaměstnance'}
             </Button>
-          </>
-        }
-      >
-        <form className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              {...register('first_name', { required: 'Jméno je povinné' })}
-              label="Křestní jméno"
-              type="text"
-              placeholder="Jan"
-              error={errors.first_name?.message}
-              required
-            />
-            
-            <Input
-              {...register('last_name', { required: 'Příjmení je povinné' })}
-              label="Příjmení"
-              type="text"
-              placeholder="Novák"
-              error={errors.last_name?.message}
-              required
-            />
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              {...register('email')}
-              label="E-mail"
-              type="email"
-              placeholder="jan.novak@email.cz"
-              error={errors.email?.message}
-            />
-            
-            <Input
-              {...register('phone')}
-              label="Telefon"
-              type="tel"
-              placeholder="+420 123 456 789"
-              error={errors.phone?.message}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              {...register('position', { required: 'Pozice je povinná' })}
-              label="Pozice"
-              type="select"
-              error={errors.position?.message}
-              required
-            >
-              <option value="">Vyberte pozici</option>
-              {positions.map(position => (
-                <option key={position} value={position}>
-                  {position}
-                </option>
-              ))}
-            </Input>
-            
-            <Input
-              {...register('start_date', { required: 'Datum nástupu je povinné' })}
-              label="Datum nástupu"
-              type="date"
-              error={errors.start_date?.message}
-              required
-            />
-          </div>
-
-          <Input
-            {...register('hourly_rate')}
-            label="Hodinová sazba"
-            type="number"
-            step="0.01"
-            placeholder="350"
-            suffix="Kč/hod"
-            error={errors.hourly_rate?.message}
-          />
-
-          <Input
-            {...register('notes')}
-            label="Poznámky"
-            type="textarea"
-            rows={3}
-            placeholder="Dodatečné informace o zaměstnanci..."
-          />
         </form>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Modal */}
       <Modal
         isOpen={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
-        title="Smazat zaměstnance"
+        onClose={() => {
+          setShowDeleteModal(false)
+          setEmployeeToDelete(null)
+        }}
+        title="Deaktivovat zaměstnance"
         size="sm"
-        footer={
-          <>
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            Opravdu chcete deaktivovat zaměstnance "{employeeToDelete?.full_name}"? 
+            Zaměstnanec bude označen jako ukončený, ale data zůstanou zachována.
+          </p>
+          <div className="flex justify-end space-x-3">
             <Button
               variant="outline"
-              onClick={() => setShowDeleteModal(false)}
-              disabled={deleteLoading}
+              onClick={() => {
+                setShowDeleteModal(false)
+                setEmployeeToDelete(null)
+              }}
             >
               Zrušit
             </Button>
             <Button
               variant="danger"
-              onClick={handleDelete}
               loading={deleteLoading}
+              onClick={handleDelete}
             >
-              Smazat
+              Deaktivovat
             </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div className="flex items-center space-x-3 text-red-600">
-            <i className="fas fa-exclamation-triangle text-2xl" />
-            <div>
-              <p className="font-medium">Opravdu chcete smazat tohoto zaměstnance?</p>
-              <p className="text-sm text-gray-600 mt-1">
-                Tato akce je nevratná a smaže všechna související data.
-              </p>
-            </div>
           </div>
-          
-          {employeeToDelete && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="font-medium text-gray-900">
-                {`${employeeToDelete.first_name} ${employeeToDelete.last_name}`}
-              </p>
-              <p className="text-sm text-gray-600 mt-1">{employeeToDelete.position}</p>
-            </div>
-          )}
         </div>
       </Modal>
     </div>
