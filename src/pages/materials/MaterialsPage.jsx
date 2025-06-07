@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { Button, Table, Card, Input, Modal, ActionButton, CurrencyCell } from '../../components/ui'
 import { MATERIAL_CATEGORIES } from '../../utils/constants'
 import { formatCurrency } from '../../utils/helpers'
+import { supabase } from '../../config/supabase'
 import toast from 'react-hot-toast'
 
 const MaterialsPage = () => {
@@ -32,63 +33,28 @@ const MaterialsPage = () => {
     }
   })
 
-  // Mock data - replace with real API calls
-  useEffect(() => {
-    const mockMaterials = [
-      {
-        id: 1,
-        name: 'Cement Portland CEM I 42,5',
-        category: 'Beton a malta',
-        unit: 'kg',
-        price_per_unit: 4.50,
-        current_stock: 2500,
-        min_stock: 500,
-        supplier: 'Heidelberg Cement',
-        notes: 'Standardní cement pro běžné stavby',
-        last_updated: '2024-01-15T10:00:00Z'
-      },
-      {
-        id: 2,
-        name: 'Cihla pálená plná 250x120x65',
-        category: 'Cihly a bloky',
-        unit: 'ks',
-        price_per_unit: 8.20,
-        current_stock: 15000,
-        min_stock: 2000,
-        supplier: 'Wienerberger',
-        notes: 'Pálená cihla pro nosné konstrukce',
-        last_updated: '2024-01-14T14:30:00Z'
-      },
-      {
-        id: 3,
-        name: 'Řezivo jehličnaté 50x100mm',
-        category: 'Dřevo a materiály',
-        unit: 'm',
-        price_per_unit: 125.00,
-        current_stock: 850,
-        min_stock: 100,
-        supplier: 'Stora Enso',
-        notes: 'Konstrukční řezivo C24',
-        last_updated: '2024-01-13T09:15:00Z'
-      },
-      {
-        id: 4,
-        name: 'Ocelová výztuž B500B 12mm',
-        category: 'Ocel a kovy',
-        unit: 'kg',
-        price_per_unit: 28.50,
-        current_stock: 1200,
-        min_stock: 200,
-        supplier: 'ArcelorMittal',
-        notes: 'Betonářská výztuž',
-        last_updated: '2024-01-12T16:45:00Z'
-      }
-    ]
+  // Load materials from Supabase
+  const loadMaterials = async () => {
+    try {
+      setIsLoading(true)
+      const { data, error } = await supabase
+        .from('materials')
+        .select('*')
+        .order('name')
 
-    setTimeout(() => {
-      setMaterials(mockMaterials)
+      if (error) throw error
+
+      setMaterials(data || [])
+    } catch (error) {
+      console.error('Error loading materials:', error)
+      toast.error('Chyba při načítání materiálů')
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
+  }
+
+  useEffect(() => {
+    loadMaterials()
   }, [])
 
   useEffect(() => {
@@ -138,38 +104,47 @@ const MaterialsPage = () => {
   const onSubmit = async (data) => {
     setSubmitting(true)
     try {
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      const newMaterial = {
+      const materialData = {
         ...data,
-        id: editingMaterial ? editingMaterial.id : Date.now(),
         price_per_unit: parseFloat(data.price_per_unit) || 0,
         current_stock: parseInt(data.current_stock) || 0,
         min_stock: parseInt(data.min_stock) || 0,
-        last_updated: new Date().toISOString()
       }
 
+      let result
       if (editingMaterial) {
-        setMaterials(prev => prev.map(m => m.id === editingMaterial.id ? newMaterial : m))
-        toast.success('Materiál upraven')
+        // Update existing material
+        result = await supabase
+          .from('materials')
+          .update(materialData)
+          .eq('id', editingMaterial.id)
+          .select()
       } else {
-        setMaterials(prev => [newMaterial, ...prev])
-        toast.success('Materiál přidán')
+        // Create new material
+        result = await supabase
+          .from('materials')
+          .insert([materialData])
+          .select()
       }
+
+      if (result.error) throw result.error
+
+      toast.success(editingMaterial ? 'Materiál byl aktualizován' : 'Materiál byl přidán')
       
-      handleCloseModal()
+      // Reload materials
+      await loadMaterials()
+      
+      // Reset form and close modal
+      reset()
+      setShowAddModal(false)
+      setEditingMaterial(null)
+      
     } catch (error) {
-      toast.error('Chyba při ukládání')
+      console.error('Error saving material:', error)
+      toast.error('Chyba při ukládání materiálu')
     } finally {
       setSubmitting(false)
     }
-  }
-
-  const handleCloseModal = () => {
-    setShowAddModal(false)
-    setEditingMaterial(null)
-    reset()
   }
 
   const handleEdit = (material) => {
@@ -187,16 +162,30 @@ const MaterialsPage = () => {
 
     setDeleteLoading(true)
     try {
-      await new Promise(resolve => setTimeout(resolve, 500))
-      setMaterials(prev => prev.filter(m => m.id !== materialToDelete.id))
-      toast.success('Materiál smazán')
+      const { error } = await supabase
+        .from('materials')
+        .delete()
+        .eq('id', materialToDelete.id)
+
+      if (error) throw error
+
+      toast.success('Materiál byl smazán')
+      await loadMaterials()
       setShowDeleteModal(false)
       setMaterialToDelete(null)
+      
     } catch (error) {
-      toast.error('Chyba při mazání')
+      console.error('Error deleting material:', error)
+      toast.error('Chyba při mazání materiálu')
     } finally {
       setDeleteLoading(false)
     }
+  }
+
+  const handleAddNew = () => {
+    setEditingMaterial(null)
+    reset()
+    setShowAddModal(true)
   }
 
   const filteredMaterials = getFilteredMaterials()
@@ -208,7 +197,7 @@ const MaterialsPage = () => {
       title: 'Materiál',
       render: (value, row) => (
         <div>
-          <div className="font-semibold text-gray-900">{value}</div>
+          <div className="font-medium text-gray-900">{value}</div>
           <div className="text-sm text-gray-500">{row.category}</div>
         </div>
       )
@@ -217,15 +206,14 @@ const MaterialsPage = () => {
       key: 'current_stock',
       title: 'Sklad',
       render: (value, row) => (
-        <div>
-          <span className={`font-medium ${value <= row.min_stock ? 'text-red-600' : 'text-gray-900'}`}>
+        <div className="text-center">
+          <span className={`font-semibold ${
+            value <= row.min_stock ? 'text-red-600' : 'text-gray-900'
+          }`}>
             {value} {row.unit}
           </span>
           {value <= row.min_stock && (
-            <div className="text-xs text-red-600 flex items-center mt-1">
-              <i className="fas fa-exclamation-triangle mr-1" />
-              Nízký stav
-            </div>
+            <div className="text-xs text-red-500">Nízký stav!</div>
           )}
         </div>
       )
@@ -234,7 +222,7 @@ const MaterialsPage = () => {
       key: 'price_per_unit',
       title: 'Cena/jednotka',
       render: (value, row) => (
-        <div>
+        <div className="text-right">
           <CurrencyCell amount={value} />
           <div className="text-xs text-gray-500">za {row.unit}</div>
         </div>
@@ -244,7 +232,9 @@ const MaterialsPage = () => {
       key: 'total_value',
       title: 'Celková hodnota',
       render: (_, row) => (
-        <CurrencyCell amount={row.current_stock * row.price_per_unit} />
+        <div className="text-right">
+          <CurrencyCell amount={row.current_stock * row.price_per_unit} />
+        </div>
       )
     },
     {
@@ -257,20 +247,6 @@ const MaterialsPage = () => {
       title: 'Akce',
       render: (_, row) => (
         <div className="flex items-center space-x-2">
-          <ActionButton
-            icon="fas fa-plus"
-            tooltip="Přidat do skladu"
-            onClick={() => console.log('Add stock', row)}
-            variant="ghost"
-            className="text-green-600 hover:text-green-700 hover:bg-green-50"
-          />
-          <ActionButton
-            icon="fas fa-minus"
-            tooltip="Odebrat ze skladu"
-            onClick={() => console.log('Remove stock', row)}
-            variant="ghost"
-            className="text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50"
-          />
           <ActionButton
             icon="fas fa-edit"
             tooltip="Upravit"
@@ -295,71 +271,68 @@ const MaterialsPage = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Materiál</h1>
-          <p className="text-gray-600">Správa skladu a nákupu materiálu</p>
+          <p className="text-gray-600 mt-1">Správa skladových zásob a materiálů</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Button
-            variant="outline"
-            onClick={() => console.log('Generate order')}
-            icon="fas fa-shopping-cart"
-          >
-            Vygenerovat objednávku
-          </Button>
-          <Button
-            onClick={() => setShowAddModal(true)}
-            icon="fas fa-plus"
-          >
-            Přidat materiál
-          </Button>
-        </div>
+        <Button onClick={handleAddNew} className="bg-primary-600 hover:bg-primary-700">
+          <i className="fas fa-plus mr-2" />
+          Přidat materiál
+        </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-boxes text-blue-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Druhy materiálu</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-exclamation-triangle text-red-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Nízký stav</p>
-              <p className="text-2xl font-bold text-red-600">{stats.lowStock}</p>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Celkem materiálů</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-boxes text-blue-600" />
+              </div>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-coins text-green-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Hodnota skladu</p>
-              <p className="text-xl font-bold text-green-600">{formatCurrency(stats.totalValue)}</p>
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Nízký stav</p>
+                <p className="text-2xl font-bold text-red-600">{stats.lowStock}</p>
+              </div>
+              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-exclamation-triangle text-red-600" />
+              </div>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-tags text-yellow-600 text-xl" />
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Celková hodnota</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.totalValue)}</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-coins text-green-600" />
+              </div>
             </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Kategorie</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.categoriesCount}</p>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Kategorie</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.categoriesCount}</p>
+              </div>
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-tags text-purple-600" />
+              </div>
             </div>
           </div>
         </Card>
@@ -367,36 +340,28 @@ const MaterialsPage = () => {
 
       {/* Filters */}
       <Card>
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Filtry</h2>
-        </div>
         <div className="p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Filtry</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
-              type="text"
               placeholder="Hledat materiál..."
               value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
               icon="fas fa-search"
             />
-            
-            <Input
-              type="select"
+            <select
               value={filters.category}
-              onChange={(e) => setFilters({ ...filters, category: e.target.value })}
+              onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               <option value="">Všechny kategorie</option>
               {MATERIAL_CATEGORIES.map(category => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
+                <option key={category} value={category}>{category}</option>
               ))}
-            </Input>
-
+            </select>
             <Button
               variant="outline"
-              onClick={() => setFilters({ search: '', category: '' })}
-              size="sm"
+              onClick={() => setFilters({ category: '', search: '' })}
             >
               Vymazat filtry
             </Button>
@@ -406,190 +371,161 @@ const MaterialsPage = () => {
 
       {/* Materials Table */}
       <Card>
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Sklad materiálu ({filteredMaterials.length})
-            </h2>
-            <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" icon="fas fa-download">
-                Export
-              </Button>
-              <Button variant="outline" size="sm" icon="fas fa-upload">
-                Import
-              </Button>
-            </div>
+        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Sklad materiálu ({filteredMaterials.length})
+          </h3>
+          <div className="flex space-x-2">
+            <Button variant="outline" size="sm">
+              <i className="fas fa-download mr-2" />
+              Export
+            </Button>
+            <Button variant="outline" size="sm">
+              <i className="fas fa-upload mr-2" />
+              Import
+            </Button>
           </div>
         </div>
-        
         <Table
+          data={filteredMaterials}
           columns={columns}
-          data={filteredMaterials.map(material => ({
-            ...material,
-            _highlight: material.current_stock <= material.min_stock
-          }))}
           loading={isLoading}
-          emptyMessage="Žádný materiál nenalezen"
-          emptyIcon="fas fa-boxes"
+          emptyMessage="Žádné materiály nenalezeny"
         />
       </Card>
 
-      {/* Add/Edit Material Modal */}
+      {/* Add/Edit Modal */}
       <Modal
         isOpen={showAddModal}
-        onClose={handleCloseModal}
+        onClose={() => {
+          setShowAddModal(false)
+          setEditingMaterial(null)
+          reset()
+        }}
         title={editingMaterial ? 'Upravit materiál' : 'Nový materiál'}
         size="lg"
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={handleCloseModal}
-              disabled={submitting}
-            >
-              Zrušit
-            </Button>
-            <Button
-              onClick={handleSubmit(onSubmit)}
-              loading={submitting}
-              icon="fas fa-save"
-            >
-              {editingMaterial ? 'Uložit změny' : 'Přidat materiál'}
-            </Button>
-          </>
-        }
       >
-        <form className="space-y-6">
-          <Input
-            {...register('name', { required: 'Název materiálu je povinný' })}
-            label="Název materiálu"
-            type="text"
-            placeholder="Cement Portland CEM I 42,5"
-            error={errors.name?.message}
-            required
-          />
-
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
+              label="Název materiálu *"
+              {...register('name', { required: 'Název je povinný' })}
+              error={errors.name?.message}
+            />
+            <select
               {...register('category', { required: 'Kategorie je povinná' })}
-              label="Kategorie"
-              type="select"
-              error={errors.category?.message}
-              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
             >
               <option value="">Vyberte kategorii</option>
               {MATERIAL_CATEGORIES.map(category => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
+                <option key={category} value={category}>{category}</option>
               ))}
-            </Input>
-            
-            <Input
-              {...register('unit', { required: 'Jednotka je povinná' })}
-              label="Jednotka"
-              type="text"
-              placeholder="kg, m, ks, m², m³"
-              error={errors.unit?.message}
-              required
-            />
+            </select>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
-              {...register('price_per_unit', { 
-                required: 'Cena je povinná',
-                min: { value: 0, message: 'Cena musí být kladná' }
-              })}
+              label="Jednotka *"
+              {...register('unit', { required: 'Jednotka je povinná' })}
+              error={errors.unit?.message}
+              placeholder="kg, ks, m..."
+            />
+            <Input
               label="Cena za jednotku"
               type="number"
               step="0.01"
+              {...register('price_per_unit')}
               placeholder="0.00"
-              suffix="Kč"
-              error={errors.price_per_unit?.message}
-              required
             />
-            
             <Input
-              {...register('current_stock', { 
-                required: 'Současný stav je povinný',
-                min: { value: 0, message: 'Stav nemůže být záporný' }
-              })}
               label="Současný stav"
               type="number"
+              {...register('current_stock')}
               placeholder="0"
-              error={errors.current_stock?.message}
-              required
-            />
-            
-            <Input
-              {...register('min_stock', { 
-                min: { value: 0, message: 'Minimální stav nemůže být záporný' }
-              })}
-              label="Minimální stav"
-              type="number"
-              placeholder="0"
-              error={errors.min_stock?.message}
             />
           </div>
 
-          <Input
-            {...register('supplier')}
-            label="Dodavatel"
-            type="text"
-            placeholder="Název dodavatele"
-          />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Minimální stav"
+              type="number"
+              {...register('min_stock')}
+              placeholder="0"
+            />
+            <Input
+              label="Dodavatel"
+              {...register('supplier')}
+              placeholder="Název dodavatele"
+            />
+          </div>
 
-          <Input
-            {...register('notes')}
-            label="Poznámky"
-            type="textarea"
-            rows={3}
-            placeholder="Dodatečné informace o materiálu..."
-          />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Poznámky
+            </label>
+            <textarea
+              {...register('notes')}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              placeholder="Dodatečné informace o materiálu..."
+            />
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowAddModal(false)
+                setEditingMaterial(null)
+                reset()
+              }}
+            >
+              Zrušit
+            </Button>
+            <Button
+              type="submit"
+              loading={submitting}
+              className="bg-primary-600 hover:bg-primary-700"
+            >
+              {editingMaterial ? 'Uložit změny' : 'Přidat materiál'}
+            </Button>
+          </div>
         </form>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Modal */}
       <Modal
         isOpen={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
+        onClose={() => {
+          setShowDeleteModal(false)
+          setMaterialToDelete(null)
+        }}
         title="Smazat materiál"
         size="sm"
-        footer={
-          <>
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            Opravdu chcete smazat materiál "{materialToDelete?.name}"? Tato akce je nevratná.
+          </p>
+          <div className="flex justify-end space-x-3">
             <Button
               variant="outline"
-              onClick={() => setShowDeleteModal(false)}
-              disabled={deleteLoading}
+              onClick={() => {
+                setShowDeleteModal(false)
+                setMaterialToDelete(null)
+              }}
             >
               Zrušit
             </Button>
             <Button
               variant="danger"
-              onClick={handleDelete}
               loading={deleteLoading}
+              onClick={handleDelete}
             >
               Smazat
             </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div className="flex items-center space-x-3 text-red-600">
-            <i className="fas fa-exclamation-triangle text-2xl" />
-            <div>
-              <p className="font-medium">Opravdu chcete smazat tento materiál?</p>
-              <p className="text-sm text-gray-600 mt-1">Tato akce je nevratná.</p>
-            </div>
           </div>
-          
-          {materialToDelete && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="font-medium text-gray-900">{materialToDelete.name}</p>
-              <p className="text-sm text-gray-600 mt-1">{materialToDelete.category}</p>
-            </div>
-          )}
         </div>
       </Modal>
     </div>
