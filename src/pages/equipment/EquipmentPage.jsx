@@ -3,10 +3,12 @@ import { useForm } from 'react-hook-form'
 import { Button, Table, Card, Input, Modal, StatusBadge, ActionButton, CurrencyCell, DateCell } from '../../components/ui'
 import { EQUIPMENT_STATUS, EQUIPMENT_CATEGORIES, STATUS_LABELS, STATUS_COLORS } from '../../utils/constants'
 import { formatCurrency, formatDate } from '../../utils/helpers'
+import { supabase } from '../../config/supabase'
 import toast from 'react-hot-toast'
 
 const EquipmentPage = () => {
   const [equipment, setEquipment] = useState([])
+  const [employees, setEmployees] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingEquipment, setEditingEquipment] = useState(null)
@@ -32,79 +34,66 @@ const EquipmentPage = () => {
       current_value: '',
       status: EQUIPMENT_STATUS.AVAILABLE,
       location: '',
+      borrowed_by: '',
       notes: ''
     }
   })
 
-  // Mock data - replace with real API calls
-  useEffect(() => {
-    const mockEquipment = [
-      {
-        id: 1,
-        name: 'Úhlová bruska 230mm',
-        category: 'Elektrické nářadí',
-        manufacturer: 'Bosch',
-        model: 'GWS 22-230 JH',
-        serial_number: 'BS2023001',
-        purchase_date: '2023-03-15',
-        purchase_price: 3500,
-        current_value: 2800,
-        status: EQUIPMENT_STATUS.AVAILABLE,
-        location: 'Sklad A - Regál 3',
-        notes: 'V dobrém stavu, poslední servis 12/2023',
-        borrowed_by: null,
-        borrowed_date: null,
-        last_service: '2023-12-10',
-        next_service: '2024-06-10'
-      },
-      {
-        id: 2,
-        name: 'Stavební míchačka 200L',
-        category: 'Stavební stroje',
-        manufacturer: 'Altrad',
-        model: 'B200E',
-        serial_number: 'AT2022045',
-        purchase_date: '2022-05-20',
-        purchase_price: 15000,
-        current_value: 12000,
-        status: EQUIPMENT_STATUS.BORROWED,
-        location: 'Projekt - Stavba domu Novák',
-        notes: 'Vypůjčeno na projekt',
-        borrowed_by: 'Jan Dvořák',
-        borrowed_date: '2024-01-10',
-        last_service: '2023-11-15',
-        next_service: '2024-05-15'
-      },
-      {
-        id: 3,
-        name: 'Vrtací kladivo SDS-max',
-        category: 'Elektrické nářadí',
-        manufacturer: 'Makita',
-        model: 'HR4013C',
-        serial_number: 'MK2023078',
-        purchase_date: '2023-08-10',
-        purchase_price: 8500,
-        current_value: 7200,
-        status: EQUIPMENT_STATUS.SERVICE,
-        location: 'Servis - Makita',
-        notes: 'V servisu od 15.1.2024 - výměna ložisek',
-        borrowed_by: null,
-        borrowed_date: null,
-        last_service: '2024-01-15',
-        next_service: '2024-07-15'
-      }
-    ]
+  // Load equipment from Supabase
+  const loadEquipment = async () => {
+    try {
+      setIsLoading(true)
+      const { data, error } = await supabase
+        .from('equipment')
+        .select(`
+          *,
+          borrowed_by_user:profiles!equipment_borrowed_by_fkey(first_name, last_name)
+        `)
+        .order('name')
 
-    setTimeout(() => {
-      setEquipment(mockEquipment)
+      if (error) throw error
+
+      const equipmentWithDetails = data?.map(item => ({
+        ...item,
+        borrowed_by_name: item.borrowed_by_user 
+          ? `${item.borrowed_by_user.first_name} ${item.borrowed_by_user.last_name}`.trim()
+          : null
+      })) || []
+
+      setEquipment(equipmentWithDetails)
+    } catch (error) {
+      console.error('Error loading equipment:', error)
+      toast.error('Chyba při načítání nářadí')
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
+  }
+
+  // Load employees for borrowing dropdown
+  const loadEmployees = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .eq('role', 'employee')
+        .order('first_name')
+
+      if (error) throw error
+      setEmployees(data || [])
+    } catch (error) {
+      console.error('Error loading employees:', error)
+    }
+  }
+
+  useEffect(() => {
+    loadEquipment()
+    loadEmployees()
   }, [])
 
   useEffect(() => {
     if (editingEquipment) {
       Object.keys(editingEquipment).forEach(key => {
-        if (key === 'purchase_date') {
+        if (key.includes('_date')) {
           setValue(key, editingEquipment[key]?.split('T')[0])
         } else {
           setValue(key, editingEquipment[key] || '')
@@ -134,7 +123,7 @@ const EquipmentPage = () => {
           item.model,
           item.serial_number,
           item.location,
-          item.borrowed_by
+          item.borrowed_by_name
         ].filter(Boolean)
         
         const matchesSearch = searchFields.some(field => 
@@ -161,37 +150,48 @@ const EquipmentPage = () => {
   const onSubmit = async (data) => {
     setSubmitting(true)
     try {
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      const newEquipment = {
+      const equipmentData = {
         ...data,
-        id: editingEquipment ? editingEquipment.id : Date.now(),
         purchase_price: parseFloat(data.purchase_price) || 0,
         current_value: parseFloat(data.current_value) || 0,
-        last_updated: new Date().toISOString()
+        borrowed_by: data.borrowed_by || null,
+        purchase_date: data.purchase_date || null
       }
 
+      let result
       if (editingEquipment) {
-        setEquipment(prev => prev.map(e => e.id === editingEquipment.id ? newEquipment : e))
-        toast.success('Nářadí upraveno')
+        // Update existing equipment
+        result = await supabase
+          .from('equipment')
+          .update(equipmentData)
+          .eq('id', editingEquipment.id)
+          .select()
       } else {
-        setEquipment(prev => [newEquipment, ...prev])
-        toast.success('Nářadí přidáno')
+        // Create new equipment
+        result = await supabase
+          .from('equipment')
+          .insert([equipmentData])
+          .select()
       }
+
+      if (result.error) throw result.error
+
+      toast.success(editingEquipment ? 'Nářadí bylo aktualizováno' : 'Nářadí bylo přidáno')
       
-      handleCloseModal()
+      // Reload equipment
+      await loadEquipment()
+      
+      // Reset form and close modal
+      reset()
+      setShowAddModal(false)
+      setEditingEquipment(null)
+      
     } catch (error) {
-      toast.error('Chyba při ukládání')
+      console.error('Error saving equipment:', error)
+      toast.error('Chyba při ukládání nářadí')
     } finally {
       setSubmitting(false)
     }
-  }
-
-  const handleCloseModal = () => {
-    setShowAddModal(false)
-    setEditingEquipment(null)
-    reset()
   }
 
   const handleEdit = (item) => {
@@ -209,16 +209,99 @@ const EquipmentPage = () => {
 
     setDeleteLoading(true)
     try {
-      await new Promise(resolve => setTimeout(resolve, 500))
-      setEquipment(prev => prev.filter(e => e.id !== equipmentToDelete.id))
-      toast.success('Nářadí smazáno')
+      const { error } = await supabase
+        .from('equipment')
+        .delete()
+        .eq('id', equipmentToDelete.id)
+
+      if (error) throw error
+
+      toast.success('Nářadí bylo smazáno')
+      await loadEquipment()
       setShowDeleteModal(false)
       setEquipmentToDelete(null)
+      
     } catch (error) {
-      toast.error('Chyba při mazání')
+      console.error('Error deleting equipment:', error)
+      toast.error('Chyba při mazání nářadí')
     } finally {
       setDeleteLoading(false)
     }
+  }
+
+  const handleBorrow = async (item) => {
+    const employeeId = prompt('ID zaměstnance pro vypůjčení:')
+    if (!employeeId) return
+
+    try {
+      const { error } = await supabase
+        .from('equipment')
+        .update({
+          status: EQUIPMENT_STATUS.BORROWED,
+          borrowed_by: employeeId,
+          borrowed_at: new Date().toISOString()
+        })
+        .eq('id', item.id)
+
+      if (error) throw error
+
+      toast.success('Nářadí bylo vypůjčeno')
+      await loadEquipment()
+      
+    } catch (error) {
+      console.error('Error borrowing equipment:', error)
+      toast.error('Chyba při vypůjčování nářadí')
+    }
+  }
+
+  const handleReturn = async (item) => {
+    try {
+      const { error } = await supabase
+        .from('equipment')
+        .update({
+          status: EQUIPMENT_STATUS.AVAILABLE,
+          borrowed_by: null,
+          borrowed_at: null,
+          returned_at: new Date().toISOString()
+        })
+        .eq('id', item.id)
+
+      if (error) throw error
+
+      toast.success('Nářadí bylo vráceno')
+      await loadEquipment()
+      
+    } catch (error) {
+      console.error('Error returning equipment:', error)
+      toast.error('Chyba při vracení nářadí')
+    }
+  }
+
+  const handleService = async (item) => {
+    try {
+      const { error } = await supabase
+        .from('equipment')
+        .update({
+          status: EQUIPMENT_STATUS.SERVICE,
+          borrowed_by: null
+        })
+        .eq('id', item.id)
+
+      if (error) throw error
+
+      toast.success('Nářadí bylo odesláno do servisu')
+      await loadEquipment()
+      
+    } catch (error) {
+      console.error('Error sending equipment to service:', error)
+      toast.error('Chyba při odesílání do servisu')
+    }
+  }
+
+  const handleAddNew = () => {
+    setEditingEquipment(null)
+    reset()
+    setShowAddModal(true)
   }
 
   const filteredEquipment = getFilteredEquipment()
@@ -227,21 +310,27 @@ const EquipmentPage = () => {
   const columns = [
     {
       key: 'name',
-      title: 'Nářadí/Stroj',
+      title: 'Nářadí',
       render: (value, row) => (
         <div>
-          <div className="font-semibold text-gray-900">{value}</div>
-          <div className="text-sm text-gray-500">
-            {row.manufacturer} {row.model}
-          </div>
-          <div className="text-xs text-gray-400">{row.serial_number}</div>
+          <div className="font-medium text-gray-900">{value}</div>
+          <div className="text-sm text-gray-500">{row.category}</div>
         </div>
       )
     },
     {
-      key: 'category',
-      title: 'Kategorie',
-      render: (value) => value || '-'
+      key: 'details',
+      title: 'Detaily',
+      render: (_, row) => (
+        <div>
+          <div className="text-sm text-gray-900">
+            {row.manufacturer} {row.model}
+          </div>
+          {row.serial_number && (
+            <div className="text-sm text-gray-500">SN: {row.serial_number}</div>
+          )}
+        </div>
+      )
     },
     {
       key: 'status',
@@ -253,9 +342,9 @@ const EquipmentPage = () => {
             statusLabels={STATUS_LABELS}
             statusColors={STATUS_COLORS}
           />
-          {row.borrowed_by && (
+          {value === EQUIPMENT_STATUS.BORROWED && row.borrowed_by_name && (
             <div className="text-xs text-gray-500 mt-1">
-              Vypůjčil: {row.borrowed_by}
+              Vypůjčeno: {row.borrowed_by_name}
             </div>
           )}
         </div>
@@ -284,7 +373,7 @@ const EquipmentPage = () => {
             <ActionButton
               icon="fas fa-hand-paper"
               tooltip="Vypůjčit"
-              onClick={() => console.log('Borrow equipment', row)}
+              onClick={() => handleBorrow(row)}
               variant="ghost"
               className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
             />
@@ -293,7 +382,7 @@ const EquipmentPage = () => {
             <ActionButton
               icon="fas fa-undo"
               tooltip="Vrátit"
-              onClick={() => console.log('Return equipment', row)}
+              onClick={() => handleReturn(row)}
               variant="ghost"
               className="text-green-600 hover:text-green-700 hover:bg-green-50"
             />
@@ -301,7 +390,7 @@ const EquipmentPage = () => {
           <ActionButton
             icon="fas fa-wrench"
             tooltip="Servis"
-            onClick={() => console.log('Service equipment', row)}
+            onClick={() => handleService(row)}
             variant="ghost"
             className="text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50"
           />
@@ -323,97 +412,88 @@ const EquipmentPage = () => {
     }
   ]
 
-  const statusOptions = [
-    { value: '', label: 'Všechny stavy' },
-    { value: EQUIPMENT_STATUS.AVAILABLE, label: STATUS_LABELS[EQUIPMENT_STATUS.AVAILABLE] },
-    { value: EQUIPMENT_STATUS.BORROWED, label: STATUS_LABELS[EQUIPMENT_STATUS.BORROWED] },
-    { value: EQUIPMENT_STATUS.SERVICE, label: STATUS_LABELS[EQUIPMENT_STATUS.SERVICE] },
-    { value: EQUIPMENT_STATUS.RETIRED, label: STATUS_LABELS[EQUIPMENT_STATUS.RETIRED] }
-  ]
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Nářadí & Stroje</h1>
-          <p className="text-gray-600">Správa nářadí, strojů a jejich výpůjček</p>
+          <h1 className="text-2xl font-bold text-gray-900">Nářadí</h1>
+          <p className="text-gray-600 mt-1">Správa nářadí a vybavení</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Button
-            variant="outline"
-            onClick={() => console.log('QR scan')}
-            icon="fas fa-qrcode"
-          >
-            Skenovat QR
-          </Button>
-          <Button
-            onClick={() => setShowAddModal(true)}
-            icon="fas fa-plus"
-          >
-            Přidat nářadí
-          </Button>
-        </div>
+        <Button onClick={handleAddNew} className="bg-primary-600 hover:bg-primary-700">
+          <i className="fas fa-plus mr-2" />
+          Přidat nářadí
+        </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-tools text-blue-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Celkem</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-check-circle text-green-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">K dispozici</p>
-              <p className="text-2xl font-bold text-green-600">{stats.available}</p>
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Celkem</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-tools text-blue-600" />
+              </div>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-hand-paper text-yellow-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Vypůjčeno</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.borrowed}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-wrench text-red-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">V servisu</p>
-              <p className="text-2xl font-bold text-red-600">{stats.inService}</p>
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">K dispozici</p>
+                <p className="text-2xl font-bold text-green-600">{stats.available}</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-check-circle text-green-600" />
+              </div>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-coins text-purple-600 text-xl" />
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Vypůjčeno</p>
+                <p className="text-2xl font-bold text-orange-600">{stats.borrowed}</p>
+              </div>
+              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-hand-paper text-orange-600" />
+              </div>
             </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Celková hodnota</p>
-              <p className="text-lg font-bold text-purple-600">{formatCurrency(stats.totalValue)}</p>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">V servisu</p>
+                <p className="text-2xl font-bold text-red-600">{stats.inService}</p>
+              </div>
+              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-wrench text-red-600" />
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Hodnota</p>
+                <p className="text-xl font-bold text-gray-900">{formatCurrency(stats.totalValue)}</p>
+              </div>
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-coins text-purple-600" />
+              </div>
             </div>
           </div>
         </Card>
@@ -421,48 +501,39 @@ const EquipmentPage = () => {
 
       {/* Filters */}
       <Card>
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Filtry</h2>
-        </div>
         <div className="p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Filtry</h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Input
-              type="text"
               placeholder="Hledat nářadí..."
               value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
               icon="fas fa-search"
             />
-            
-            <Input
-              type="select"
+            <select
               value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+              onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
-              {statusOptions.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Input>
-
-            <Input
-              type="select"
+              <option value="">Všechny stavy</option>
+              <option value={EQUIPMENT_STATUS.AVAILABLE}>{STATUS_LABELS[EQUIPMENT_STATUS.AVAILABLE]}</option>
+              <option value={EQUIPMENT_STATUS.BORROWED}>{STATUS_LABELS[EQUIPMENT_STATUS.BORROWED]}</option>
+              <option value={EQUIPMENT_STATUS.SERVICE}>{STATUS_LABELS[EQUIPMENT_STATUS.SERVICE]}</option>
+              <option value={EQUIPMENT_STATUS.RETIRED}>{STATUS_LABELS[EQUIPMENT_STATUS.RETIRED]}</option>
+            </select>
+            <select
               value={filters.category}
-              onChange={(e) => setFilters({ ...filters, category: e.target.value })}
+              onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               <option value="">Všechny kategorie</option>
               {EQUIPMENT_CATEGORIES.map(category => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
+                <option key={category} value={category}>{category}</option>
               ))}
-            </Input>
-
+            </select>
             <Button
               variant="outline"
-              onClick={() => setFilters({ search: '', status: '', category: '' })}
-              size="sm"
+              onClick={() => setFilters({ status: '', category: '', search: '' })}
             >
               Vymazat filtry
             </Button>
@@ -472,203 +543,177 @@ const EquipmentPage = () => {
 
       {/* Equipment Table */}
       <Card>
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Inventář nářadí ({filteredEquipment.length})
-            </h2>
-            <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" icon="fas fa-download">
-                Export
-              </Button>
-              <Button variant="outline" size="sm" icon="fas fa-print">
-                QR štítky
-              </Button>
-            </div>
+        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Nářadí ({filteredEquipment.length})
+          </h3>
+          <div className="flex space-x-2">
+            <Button variant="outline" size="sm">
+              <i className="fas fa-download mr-2" />
+              Export
+            </Button>
+            <Button variant="outline" size="sm">
+              <i className="fas fa-upload mr-2" />
+              Import
+            </Button>
           </div>
         </div>
-        
         <Table
-          columns={columns}
           data={filteredEquipment}
+          columns={columns}
           loading={isLoading}
           emptyMessage="Žádné nářadí nenalezeno"
-          emptyIcon="fas fa-tools"
         />
       </Card>
 
-      {/* Add/Edit Equipment Modal */}
+      {/* Add/Edit Modal */}
       <Modal
         isOpen={showAddModal}
-        onClose={handleCloseModal}
+        onClose={() => {
+          setShowAddModal(false)
+          setEditingEquipment(null)
+          reset()
+        }}
         title={editingEquipment ? 'Upravit nářadí' : 'Nové nářadí'}
         size="lg"
-        footer={
-          <>
+      >
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Název nářadí *"
+              {...register('name', { required: 'Název je povinný' })}
+              error={errors.name?.message}
+            />
+            <select
+              {...register('category', { required: 'Kategorie je povinná' })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">Vyberte kategorii</option>
+              {EQUIPMENT_CATEGORIES.map(category => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Input
+              label="Výrobce"
+              {...register('manufacturer')}
+            />
+            <Input
+              label="Model"
+              {...register('model')}
+            />
+            <Input
+              label="Sériové číslo"
+              {...register('serial_number')}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Input
+              label="Datum nákupu"
+              type="date"
+              {...register('purchase_date')}
+            />
+            <Input
+              label="Nákupní cena"
+              type="number"
+              step="0.01"
+              {...register('purchase_price')}
+            />
+            <Input
+              label="Současná hodnota"
+              type="number"
+              step="0.01"
+              {...register('current_value')}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <select
+              {...register('status')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            >
+              <option value={EQUIPMENT_STATUS.AVAILABLE}>{STATUS_LABELS[EQUIPMENT_STATUS.AVAILABLE]}</option>
+              <option value={EQUIPMENT_STATUS.BORROWED}>{STATUS_LABELS[EQUIPMENT_STATUS.BORROWED]}</option>
+              <option value={EQUIPMENT_STATUS.SERVICE}>{STATUS_LABELS[EQUIPMENT_STATUS.SERVICE]}</option>
+              <option value={EQUIPMENT_STATUS.RETIRED}>{STATUS_LABELS[EQUIPMENT_STATUS.RETIRED]}</option>
+            </select>
+            <Input
+              label="Umístění"
+              {...register('location')}
+              placeholder="Kde se nářadí nachází"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Poznámky
+            </label>
+            <textarea
+              {...register('notes')}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              placeholder="Dodatečné informace o nářadí..."
+            />
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
             <Button
+              type="button"
               variant="outline"
-              onClick={handleCloseModal}
-              disabled={submitting}
+              onClick={() => {
+                setShowAddModal(false)
+                setEditingEquipment(null)
+                reset()
+              }}
             >
               Zrušit
             </Button>
             <Button
-              onClick={handleSubmit(onSubmit)}
+              type="submit"
               loading={submitting}
-              icon="fas fa-save"
+              className="bg-primary-600 hover:bg-primary-700"
             >
               {editingEquipment ? 'Uložit změny' : 'Přidat nářadí'}
             </Button>
-          </>
-        }
-      >
-        <form className="space-y-6">
-          <Input
-            {...register('name', { required: 'Název je povinný' })}
-            label="Název nářadí/stroje"
-            type="text"
-            placeholder="Úhlová bruska 230mm"
-            error={errors.name?.message}
-            required
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              {...register('category', { required: 'Kategorie je povinná' })}
-              label="Kategorie"
-              type="select"
-              error={errors.category?.message}
-              required
-            >
-              <option value="">Vyberte kategorii</option>
-              {EQUIPMENT_CATEGORIES.map(category => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </Input>
-            
-            <Input
-              {...register('status')}
-              label="Stav"
-              type="select"
-            >
-              {statusOptions.slice(1).map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Input>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              {...register('manufacturer')}
-              label="Výrobce"
-              type="text"
-              placeholder="Bosch"
-            />
-            
-            <Input
-              {...register('model')}
-              label="Model"
-              type="text"
-              placeholder="GWS 22-230 JH"
-            />
-            
-            <Input
-              {...register('serial_number')}
-              label="Sériové číslo"
-              type="text"
-              placeholder="BS2023001"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              {...register('purchase_date')}
-              label="Datum nákupu"
-              type="date"
-            />
-            
-            <Input
-              {...register('purchase_price')}
-              label="Pořizovací cena"
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              suffix="Kč"
-            />
-            
-            <Input
-              {...register('current_value')}
-              label="Současná hodnota"
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              suffix="Kč"
-            />
-          </div>
-
-          <Input
-            {...register('location')}
-            label="Umístění"
-            type="text"
-            placeholder="Sklad A - Regál 3"
-          />
-
-          <Input
-            {...register('notes')}
-            label="Poznámky"
-            type="textarea"
-            rows={3}
-            placeholder="Dodatečné informace o nářadí..."
-          />
         </form>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Modal */}
       <Modal
         isOpen={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
+        onClose={() => {
+          setShowDeleteModal(false)
+          setEquipmentToDelete(null)
+        }}
         title="Smazat nářadí"
         size="sm"
-        footer={
-          <>
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            Opravdu chcete smazat nářadí "{equipmentToDelete?.name}"? Tato akce je nevratná.
+          </p>
+          <div className="flex justify-end space-x-3">
             <Button
               variant="outline"
-              onClick={() => setShowDeleteModal(false)}
-              disabled={deleteLoading}
+              onClick={() => {
+                setShowDeleteModal(false)
+                setEquipmentToDelete(null)
+              }}
             >
               Zrušit
             </Button>
             <Button
               variant="danger"
-              onClick={handleDelete}
               loading={deleteLoading}
+              onClick={handleDelete}
             >
               Smazat
             </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div className="flex items-center space-x-3 text-red-600">
-            <i className="fas fa-exclamation-triangle text-2xl" />
-            <div>
-              <p className="font-medium">Opravdu chcete smazat toto nářadí?</p>
-              <p className="text-sm text-gray-600 mt-1">Tato akce je nevratná.</p>
-            </div>
           </div>
-          
-          {equipmentToDelete && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="font-medium text-gray-900">{equipmentToDelete.name}</p>
-              <p className="text-sm text-gray-600 mt-1">
-                {equipmentToDelete.manufacturer} {equipmentToDelete.model}
-              </p>
-            </div>
-          )}
         </div>
       </Modal>
     </div>
