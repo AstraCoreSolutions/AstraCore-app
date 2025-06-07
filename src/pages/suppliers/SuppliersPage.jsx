@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Button, Table, Card, Input, Modal, ActionButton, StatusBadge } from '../../components/ui'
+import { Button, Table, Card, Input, Modal, StatusBadge, ActionButton } from '../../components/ui'
 import { formatDate, formatCurrency } from '../../utils/helpers'
+import { supabase } from '../../config/supabase'
 import toast from 'react-hot-toast'
 
 const SuppliersPage = () => {
@@ -25,117 +26,67 @@ const SuppliersPage = () => {
       category: '',
       email: '',
       phone: '',
-      website: '',
       ico: '',
       dic: '',
       address: '',
       city: '',
       postal_code: '',
       contact_person: '',
-      payment_terms: '30',
+      website: '',
+      payment_terms: 30,
+      rating: 3,
       status: 'active',
-      rating: '5',
       notes: ''
     }
   })
 
-  // Mock data - replace with real API calls
-  useEffect(() => {
-    const mockSuppliers = [
-      {
-        id: 1,
-        name: 'Heidelberg Cement s.r.o.',
-        category: 'Beton a malta',
-        email: 'objednavky@heidelberg.cz',
-        phone: '+420 235 012 345',
-        website: 'www.heidelbergcement.cz',
-        ico: '11223344',
-        dic: 'CZ11223344',
-        address: 'Průmyslová 50',
-        city: 'Praha',
-        postal_code: '140 00',
-        contact_person: 'Ing. Pavel Kratochvíl',
-        payment_terms: 30,
-        status: 'active',
-        rating: 5,
-        notes: 'Hlavní dodavatel cementu, spolehlivý partner',
-        orders_count: 45,
-        total_spent: 850000,
-        last_order: '2024-01-12',
-        created_at: '2023-01-10T10:00:00Z'
-      },
-      {
-        id: 2,
-        name: 'Wienerberger spol. s r.o.',
-        category: 'Cihly a bloky',
-        email: 'prodej@wienerberger.cz',
-        phone: '+420 271 019 111',
-        website: 'www.wienerberger.cz',
-        ico: '55667788',
-        dic: 'CZ55667788',
-        address: 'Na Příkopech 14',
-        city: 'Praha',
-        postal_code: '110 00',
-        contact_person: 'Bc. Jana Nováková',
-        payment_terms: 14,
-        status: 'active',
-        rating: 4,
-        notes: 'Kvalitní cihly, rychlé dodání',
-        orders_count: 28,
-        total_spent: 420000,
-        last_order: '2024-01-08',
-        created_at: '2023-02-15T14:30:00Z'
-      },
-      {
-        id: 3,
-        name: 'Pila Hradec s.r.o.',
-        category: 'Dřevo a materiály',
-        email: 'info@pila-hradec.cz',
-        phone: '+420 495 123 456',
-        website: 'www.pila-hradec.cz',
-        ico: '99887766',
-        dic: 'CZ99887766',
-        address: 'Lesní 89',
-        city: 'Hradec Králové',
-        postal_code: '500 02',
-        contact_person: 'Tomáš Svoboda',
-        payment_terms: 21,
-        status: 'active',
-        rating: 4,
-        notes: 'Místní dodavatel řeziva, dobré ceny',
-        orders_count: 15,
-        total_spent: 180000,
-        last_order: '2023-12-20',
-        created_at: '2023-05-10T09:15:00Z'
-      },
-      {
-        id: 4,
-        name: 'Nářadí ProTool s.r.o.',
-        category: 'Nářadí a stroje',
-        email: 'eshop@protool.cz',
-        phone: '+420 587 654 321',
-        website: 'www.protool.cz',
-        ico: '44332211',
-        dic: 'CZ44332211',
-        address: 'Technická 15',
-        city: 'Brno',
-        postal_code: '612 00',
-        contact_person: 'Mgr. Petr Dvořák',
-        payment_terms: 7,
-        status: 'inactive',
-        rating: 3,
-        notes: 'Drahé, ale kvalitní nářadí. Využíváme zřídka.',
-        orders_count: 8,
-        total_spent: 95000,
-        last_order: '2023-11-05',
-        created_at: '2023-08-20T16:45:00Z'
-      }
-    ]
+  const supplierCategories = [
+    'Beton a malta',
+    'Cihly a bloky', 
+    'Dřevo a materiály',
+    'Ocel a kovy',
+    'Izolace',
+    'Střešní materiály',
+    'Nářadí a stroje',
+    'Elektromateriál',
+    'Voda a topení',
+    'Služby',
+    'Doprava',
+    'Ostatní'
+  ]
 
-    setTimeout(() => {
-      setSuppliers(mockSuppliers)
+  // Load suppliers from Supabase
+  const loadSuppliers = async () => {
+    try {
+      setIsLoading(true)
+      const { data, error } = await supabase
+        .from('suppliers')
+        .select(`
+          *,
+          orders:material_purchases(count),
+          total_orders:material_purchases(amount)
+        `)
+        .order('name')
+
+      if (error) throw error
+
+      const suppliersWithStats = data?.map(supplier => ({
+        ...supplier,
+        orders_count: supplier.orders?.[0]?.count || 0,
+        total_amount: supplier.total_orders?.reduce((sum, order) => sum + (order.amount || 0), 0) || 0
+      })) || []
+
+      setSuppliers(suppliersWithStats)
+    } catch (error) {
+      console.error('Error loading suppliers:', error)
+      toast.error('Chyba při načítání dodavatelů')
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
+  }
+
+  useEffect(() => {
+    loadSuppliers()
   }, [])
 
   useEffect(() => {
@@ -166,7 +117,8 @@ const SuppliersPage = () => {
           supplier.email,
           supplier.phone,
           supplier.city,
-          supplier.contact_person
+          supplier.contact_person,
+          supplier.category
         ].filter(Boolean)
         
         const matchesSearch = searchFields.some(field => 
@@ -184,49 +136,55 @@ const SuppliersPage = () => {
     const total = suppliers.length
     const active = suppliers.filter(s => s.status === 'active').length
     const inactive = suppliers.filter(s => s.status === 'inactive').length
-    const totalSpent = suppliers.reduce((sum, s) => sum + (s.total_spent || 0), 0)
-    const avgRating = suppliers.reduce((sum, s) => sum + (s.rating || 0), 0) / suppliers.length
+    const totalOrders = suppliers.reduce((sum, s) => sum + (s.orders_count || 0), 0)
+    const totalAmount = suppliers.reduce((sum, s) => sum + (s.total_amount || 0), 0)
 
-    return { total, active, inactive, totalSpent, avgRating }
+    return { total, active, inactive, totalOrders, totalAmount }
   }
 
   const onSubmit = async (data) => {
     setSubmitting(true)
     try {
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      const newSupplier = {
+      const supplierData = {
         ...data,
-        id: editingSupplier ? editingSupplier.id : Date.now(),
         payment_terms: parseInt(data.payment_terms) || 30,
-        rating: parseInt(data.rating) || 5,
-        orders_count: editingSupplier?.orders_count || 0,
-        total_spent: editingSupplier?.total_spent || 0,
-        last_order: editingSupplier?.last_order || null,
-        created_at: editingSupplier?.created_at || new Date().toISOString()
+        rating: parseInt(data.rating) || 3
       }
 
+      let result
       if (editingSupplier) {
-        setSuppliers(prev => prev.map(s => s.id === editingSupplier.id ? newSupplier : s))
-        toast.success('Dodavatel upraven')
+        // Update existing supplier
+        result = await supabase
+          .from('suppliers')
+          .update(supplierData)
+          .eq('id', editingSupplier.id)
+          .select()
       } else {
-        setSuppliers(prev => [newSupplier, ...prev])
-        toast.success('Dodavatel přidán')
+        // Create new supplier
+        result = await supabase
+          .from('suppliers')
+          .insert([supplierData])
+          .select()
       }
+
+      if (result.error) throw result.error
+
+      toast.success(editingSupplier ? 'Dodavatel byl aktualizován' : 'Dodavatel byl přidán')
       
-      handleCloseModal()
+      // Reload suppliers
+      await loadSuppliers()
+      
+      // Reset form and close modal
+      reset()
+      setShowAddModal(false)
+      setEditingSupplier(null)
+      
     } catch (error) {
-      toast.error('Chyba při ukládání')
+      console.error('Error saving supplier:', error)
+      toast.error('Chyba při ukládání dodavatele')
     } finally {
       setSubmitting(false)
     }
-  }
-
-  const handleCloseModal = () => {
-    setShowAddModal(false)
-    setEditingSupplier(null)
-    reset()
   }
 
   const handleEdit = (supplier) => {
@@ -244,16 +202,30 @@ const SuppliersPage = () => {
 
     setDeleteLoading(true)
     try {
-      await new Promise(resolve => setTimeout(resolve, 500))
-      setSuppliers(prev => prev.filter(s => s.id !== supplierToDelete.id))
-      toast.success('Dodavatel smazán')
+      const { error } = await supabase
+        .from('suppliers')
+        .delete()
+        .eq('id', supplierToDelete.id)
+
+      if (error) throw error
+
+      toast.success('Dodavatel byl smazán')
+      await loadSuppliers()
       setShowDeleteModal(false)
       setSupplierToDelete(null)
+      
     } catch (error) {
-      toast.error('Chyba při mazání')
+      console.error('Error deleting supplier:', error)
+      toast.error('Chyba při mazání dodavatele')
     } finally {
       setDeleteLoading(false)
     }
+  }
+
+  const handleAddNew = () => {
+    setEditingSupplier(null)
+    reset()
+    setShowAddModal(true)
   }
 
   const filteredSuppliers = getFilteredSuppliers()
@@ -265,9 +237,8 @@ const SuppliersPage = () => {
       title: 'Dodavatel',
       render: (value, row) => (
         <div>
-          <div className="font-semibold text-gray-900">{value}</div>
+          <div className="font-medium text-gray-900">{value}</div>
           <div className="text-sm text-gray-500">{row.category}</div>
-          <div className="text-xs text-gray-400">IČO: {row.ico}</div>
         </div>
       )
     },
@@ -276,21 +247,29 @@ const SuppliersPage = () => {
       title: 'Kontakt',
       render: (_, row) => (
         <div>
-          <div className="text-sm">{row.email || '-'}</div>
-          <div className="text-sm text-gray-500">{row.phone || '-'}</div>
+          {row.email && (
+            <div className="text-sm text-gray-900">{row.email}</div>
+          )}
+          {row.phone && (
+            <div className="text-sm text-gray-500">{row.phone}</div>
+          )}
           {row.contact_person && (
-            <div className="text-xs text-gray-400">{row.contact_person}</div>
+            <div className="text-sm text-gray-500">{row.contact_person}</div>
           )}
         </div>
       )
     },
     {
       key: 'location',
-      title: 'Místo',
+      title: 'Lokace',
       render: (_, row) => (
         <div>
-          <div className="text-sm">{row.city}</div>
-          <div className="text-xs text-gray-500">{row.postal_code}</div>
+          {row.city && (
+            <div className="text-sm text-gray-900">{row.city}</div>
+          )}
+          {row.postal_code && (
+            <div className="text-sm text-gray-500">{row.postal_code}</div>
+          )}
         </div>
       )
     },
@@ -299,10 +278,12 @@ const SuppliersPage = () => {
       title: 'Hodnocení',
       render: (value) => (
         <div className="flex items-center">
-          {[...Array(5)].map((_, i) => (
-            <i 
-              key={i} 
-              className={`fas fa-star ${i < value ? 'text-yellow-400' : 'text-gray-300'}`}
+          {[1, 2, 3, 4, 5].map(star => (
+            <i
+              key={star}
+              className={`fas fa-star text-sm ${
+                star <= value ? 'text-yellow-400' : 'text-gray-300'
+              }`}
             />
           ))}
           <span className="ml-2 text-sm text-gray-600">({value}/5)</span>
@@ -336,6 +317,15 @@ const SuppliersPage = () => {
       )
     },
     {
+      key: 'total_amount',
+      title: 'Celková částka',
+      render: (value) => (
+        <div className="text-right font-medium">
+          {formatCurrency(value || 0)}
+        </div>
+      )
+    },
+    {
       key: 'actions',
       title: 'Akce',
       render: (_, row) => (
@@ -343,12 +333,12 @@ const SuppliersPage = () => {
           <ActionButton
             icon="fas fa-eye"
             tooltip="Zobrazit detail"
-            onClick={() => console.log('View supplier', row)}
+            onClick={() => console.log('View supplier details', row)}
           />
           <ActionButton
             icon="fas fa-shopping-cart"
             tooltip="Historie objednávek"
-            onClick={() => console.log('View orders', row)}
+            onClick={() => console.log('View supplier orders', row)}
             variant="ghost"
           />
           <ActionButton
@@ -369,102 +359,88 @@ const SuppliersPage = () => {
     }
   ]
 
-  const categories = [
-    'Beton a malta',
-    'Cihly a bloky', 
-    'Dřevo a materiály',
-    'Ocel a kovy',
-    'Izolace',
-    'Střešní materiály',
-    'Nářadí a stroje',
-    'Elektromateriál',
-    'Voda a topení',
-    'Ostatní'
-  ]
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dodavatelé</h1>
-          <p className="text-gray-600">Správa dodavatelů a objednávek</p>
+          <p className="text-gray-600 mt-1">Správa dodavatelů a partnerů</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Button
-            variant="outline"
-            onClick={() => console.log('Generate order')}
-            icon="fas fa-shopping-cart"
-          >
-            Nová objednávka
-          </Button>
-          <Button
-            onClick={() => setShowAddModal(true)}
-            icon="fas fa-plus"
-          >
-            Přidat dodavatele
-          </Button>
-        </div>
+        <Button onClick={handleAddNew} className="bg-primary-600 hover:bg-primary-700">
+          <i className="fas fa-plus mr-2" />
+          Přidat dodavatele
+        </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-truck text-blue-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Celkem</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-check-circle text-green-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Aktivní</p>
-              <p className="text-2xl font-bold text-green-600">{stats.active}</p>
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Celkem</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-truck text-blue-600" />
+              </div>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-pause-circle text-yellow-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Neaktivní</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.inactive}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-coins text-purple-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Celkem utraceno</p>
-              <p className="text-lg font-bold text-purple-600">{formatCurrency(stats.totalSpent)}</p>
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Aktivní</p>
+                <p className="text-2xl font-bold text-green-600">{stats.active}</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-check-circle text-green-600" />
+              </div>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-star text-orange-600 text-xl" />
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Neaktivní</p>
+                <p className="text-2xl font-bold text-gray-600">{stats.inactive}</p>
+              </div>
+              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-pause-circle text-gray-600" />
+              </div>
             </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Průměrné hodnocení</p>
-              <p className="text-2xl font-bold text-orange-600">{stats.avgRating?.toFixed(1) || 0}</p>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Objednávky</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalOrders}</p>
+              </div>
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-shopping-cart text-purple-600" />
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Obrat</p>
+                <p className="text-xl font-bold text-gray-900">{formatCurrency(stats.totalAmount)}</p>
+              </div>
+              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-coins text-yellow-600" />
+              </div>
             </div>
           </div>
         </Card>
@@ -472,46 +448,37 @@ const SuppliersPage = () => {
 
       {/* Filters */}
       <Card>
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Filtry</h2>
-        </div>
         <div className="p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Filtry</h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Input
-              type="text"
               placeholder="Hledat dodavatele..."
               value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
               icon="fas fa-search"
             />
-            
-            <Input
-              type="select"
+            <select
               value={filters.category}
-              onChange={(e) => setFilters({ ...filters, category: e.target.value })}
+              onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               <option value="">Všechny kategorie</option>
-              {categories.map(category => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
+              {supplierCategories.map(category => (
+                <option key={category} value={category}>{category}</option>
               ))}
-            </Input>
-
-            <Input
-              type="select"
+            </select>
+            <select
               value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+              onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               <option value="">Všechny stavy</option>
               <option value="active">Aktivní</option>
               <option value="inactive">Neaktivní</option>
-            </Input>
-
+            </select>
             <Button
               variant="outline"
-              onClick={() => setFilters({ search: '', category: '', status: '' })}
-              size="sm"
+              onClick={() => setFilters({ category: '', status: '', search: '' })}
             >
               Vymazat filtry
             </Button>
@@ -521,232 +488,211 @@ const SuppliersPage = () => {
 
       {/* Suppliers Table */}
       <Card>
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Seznam dodavatelů ({filteredSuppliers.length})
-            </h2>
-            <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" icon="fas fa-download">
-                Export
-              </Button>
-            </div>
+        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Dodavatelé ({filteredSuppliers.length})
+          </h3>
+          <div className="flex space-x-2">
+            <Button variant="outline" size="sm">
+              <i className="fas fa-download mr-2" />
+              Export
+            </Button>
+            <Button variant="outline" size="sm">
+              <i className="fas fa-upload mr-2" />
+              Import
+            </Button>
           </div>
         </div>
-        
         <Table
-          columns={columns}
           data={filteredSuppliers}
+          columns={columns}
           loading={isLoading}
           emptyMessage="Žádní dodavatelé nenalezeni"
-          emptyIcon="fas fa-truck"
         />
       </Card>
 
-      {/* Add/Edit Supplier Modal */}
+      {/* Add/Edit Modal */}
       <Modal
         isOpen={showAddModal}
-        onClose={handleCloseModal}
+        onClose={() => {
+          setShowAddModal(false)
+          setEditingSupplier(null)
+          reset()
+        }}
         title={editingSupplier ? 'Upravit dodavatele' : 'Nový dodavatel'}
         size="lg"
-        footer={
-          <>
+      >
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Název dodavatele *"
+              {...register('name', { required: 'Název je povinný' })}
+              error={errors.name?.message}
+            />
+            <select
+              {...register('category', { required: 'Kategorie je povinná' })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">Vyberte kategorii</option>
+              {supplierCategories.map(category => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="E-mail"
+              type="email"
+              {...register('email')}
+            />
+            <Input
+              label="Telefon"
+              {...register('phone')}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="IČO"
+              {...register('ico')}
+            />
+            <Input
+              label="DIČ"
+              {...register('dic')}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Input
+              label="Adresa"
+              {...register('address')}
+            />
+            <Input
+              label="Město"
+              {...register('city')}
+            />
+            <Input
+              label="PSČ"
+              {...register('postal_code')}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Kontaktní osoba"
+              {...register('contact_person')}
+            />
+            <Input
+              label="Webové stránky"
+              {...register('website')}
+              placeholder="https://www.example.com"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Input
+              label="Platební podmínky (dny)"
+              type="number"
+              {...register('payment_terms')}
+              placeholder="30"
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Hodnocení
+              </label>
+              <select
+                {...register('rating')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="1">1 hvězda</option>
+                <option value="2">2 hvězdy</option>
+                <option value="3">3 hvězdy</option>
+                <option value="4">4 hvězdy</option>
+                <option value="5">5 hvězd</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Stav
+              </label>
+              <select
+                {...register('status')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="active">Aktivní</option>
+                <option value="inactive">Neaktivní</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Poznámky
+            </label>
+            <textarea
+              {...register('notes')}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              placeholder="Dodatečné informace o dodavateli..."
+            />
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
             <Button
+              type="button"
               variant="outline"
-              onClick={handleCloseModal}
-              disabled={submitting}
+              onClick={() => {
+                setShowAddModal(false)
+                setEditingSupplier(null)
+                reset()
+              }}
             >
               Zrušit
             </Button>
             <Button
-              onClick={handleSubmit(onSubmit)}
+              type="submit"
               loading={submitting}
-              icon="fas fa-save"
+              className="bg-primary-600 hover:bg-primary-700"
             >
               {editingSupplier ? 'Uložit změny' : 'Přidat dodavatele'}
             </Button>
-          </>
-        }
-      >
-        <form className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              {...register('name', { required: 'Název firmy je povinný' })}
-              label="Název firmy"
-              type="text"
-              placeholder="Stavební materiály s.r.o."
-              error={errors.name?.message}
-              required
-            />
-            
-            <Input
-              {...register('category')}
-              label="Kategorie"
-              type="select"
-            >
-              <option value="">Vyberte kategorii</option>
-              {categories.map(category => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </Input>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              {...register('email')}
-              label="E-mail"
-              type="email"
-              placeholder="objednavky@firma.cz"
-            />
-            
-            <Input
-              {...register('phone')}
-              label="Telefon"
-              type="tel"
-              placeholder="+420 555 123 456"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              {...register('ico')}
-              label="IČO"
-              type="text"
-              placeholder="12345678"
-            />
-            
-            <Input
-              {...register('dic')}
-              label="DIČ"
-              type="text"
-              placeholder="CZ12345678"
-            />
-            
-            <Input
-              {...register('website')}
-              label="Web"
-              type="url"
-              placeholder="www.firma.cz"
-            />
-          </div>
-
-          <Input
-            {...register('address')}
-            label="Adresa"
-            type="text"
-            placeholder="Průmyslová 123"
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              {...register('city')}
-              label="Město"
-              type="text"
-              placeholder="Praha"
-            />
-            
-            <Input
-              {...register('postal_code')}
-              label="PSČ"
-              type="text"
-              placeholder="110 00"
-            />
-          </div>
-
-          <Input
-            {...register('contact_person')}
-            label="Kontaktní osoba"
-            type="text"
-            placeholder="Ing. Pavel Novák"
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              {...register('payment_terms')}
-              label="Platební podmínky"
-              type="number"
-              placeholder="30"
-              suffix="dní"
-            />
-            
-            <Input
-              {...register('status')}
-              label="Stav"
-              type="select"
-            >
-              <option value="active">Aktivní</option>
-              <option value="inactive">Neaktivní</option>
-            </Input>
-            
-            <Input
-              {...register('rating')}
-              label="Hodnocení"
-              type="select"
-            >
-              <option value="5">⭐⭐⭐⭐⭐ (5)</option>
-              <option value="4">⭐⭐⭐⭐ (4)</option>
-              <option value="3">⭐⭐⭐ (3)</option>
-              <option value="2">⭐⭐ (2)</option>
-              <option value="1">⭐ (1)</option>
-            </Input>
-          </div>
-
-          <Input
-            {...register('notes')}
-            label="Poznámky"
-            type="textarea"
-            rows={3}
-            placeholder="Dodatečné informace o dodavateli..."
-          />
         </form>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Modal */}
       <Modal
         isOpen={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
+        onClose={() => {
+          setShowDeleteModal(false)
+          setSupplierToDelete(null)
+        }}
         title="Smazat dodavatele"
         size="sm"
-        footer={
-          <>
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            Opravdu chcete smazat dodavatele "{supplierToDelete?.name}"? Tato akce je nevratná.
+          </p>
+          <div className="flex justify-end space-x-3">
             <Button
               variant="outline"
-              onClick={() => setShowDeleteModal(false)}
-              disabled={deleteLoading}
+              onClick={() => {
+                setShowDeleteModal(false)
+                setSupplierToDelete(null)
+              }}
             >
               Zrušit
             </Button>
             <Button
               variant="danger"
-              onClick={handleDelete}
               loading={deleteLoading}
+              onClick={handleDelete}
             >
               Smazat
             </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div className="flex items-center space-x-3 text-red-600">
-            <i className="fas fa-exclamation-triangle text-2xl" />
-            <div>
-              <p className="font-medium">Opravdu chcete smazat tohoto dodavatele?</p>
-              <p className="text-sm text-gray-600 mt-1">
-                Tato akce je nevratná a smaže všechna související data.
-              </p>
-            </div>
           </div>
-          
-          {supplierToDelete && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="font-medium text-gray-900">{supplierToDelete.name}</p>
-              <p className="text-sm text-gray-600 mt-1">
-                {supplierToDelete.orders_count} objednávek • {supplierToDelete.email}
-              </p>
-            </div>
-          )}
         </div>
       </Modal>
     </div>
