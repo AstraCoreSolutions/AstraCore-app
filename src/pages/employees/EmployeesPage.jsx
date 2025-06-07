@@ -57,20 +57,17 @@ const EmployeesPage = () => {
       setIsLoading(true)
       const { data, error } = await supabase
         .from('profiles')
-        .select(`
-          *,
-          attendance_records:attendance(count),
-          projects_assigned:project_assignments(count)
-        `)
+        .select('*')
         .neq('id', user?.id) // Exclude current user
         .order('first_name')
 
       if (error) throw error
 
+      // Zjednodušená verze bez JOIN až do vyřešení schématu
       const employeesWithStats = data?.map(employee => ({
         ...employee,
-        attendance_count: employee.attendance_records?.[0]?.count || 0,
-        projects_count: employee.projects_assigned?.[0]?.count || 0,
+        attendance_count: 0, // Placeholder
+        projects_count: 0, // Placeholder
         full_name: `${employee.first_name || ''} ${employee.last_name || ''}`.trim(),
         status: employee.status || EMPLOYEE_STATUS.ACTIVE
       })) || []
