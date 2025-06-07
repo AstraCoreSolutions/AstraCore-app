@@ -68,7 +68,9 @@ function App() {
           <Route 
             path={ROUTES.LOGIN} 
             element={
-              isAuthenticated ? <Navigate to={ROUTES.DASHBOARD} replace /> : <LoginPage />
+              isAuthenticated ? 
+                <Navigate to={ROUTES.DASHBOARD} replace /> : 
+                <LoginPage />
             } 
           />
           
