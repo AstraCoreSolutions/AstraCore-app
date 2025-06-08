@@ -2,7 +2,7 @@ import { supabase, TABLES } from '../../config/supabase.js'
 import { debugLog, debugError } from '../../utils/helpers.js'
 
 export const projectsAPI = {
-  // Get all projects
+  // Get all projects - OPRAVENO
   getProjects: async (userId, userRole) => {
     try {
       debugLog('Fetching projects for user:', userId, 'role:', userRole)
@@ -12,7 +12,8 @@ export const projectsAPI = {
         .select(`
           *,
           client:clients(id, name, email),
-          manager:profiles!projects_manager_id_fkey(id, first_name, last_name)
+          manager:manager_id(id, first_name, last_name),
+          creator:created_by(id, first_name, last_name)
         `)
         .order('created_at', { ascending: false })
       
@@ -34,7 +35,7 @@ export const projectsAPI = {
     }
   },
 
-  // Get single project
+  // Get single project - OPRAVENO
   getProject: async (projectId) => {
     try {
       debugLog('Fetching project:', projectId)
@@ -44,8 +45,8 @@ export const projectsAPI = {
         .select(`
           *,
           client:clients(id, name, email, phone, address),
-          manager:profiles!projects_manager_id_fkey(id, first_name, last_name, email, phone),
-          assigned_employees_data:profiles!inner(id, first_name, last_name, position)
+          manager:manager_id(id, first_name, last_name, email, phone),
+          creator:created_by(id, first_name, last_name, email)
         `)
         .eq('id', projectId)
         .single()
@@ -61,7 +62,7 @@ export const projectsAPI = {
     }
   },
 
-  // Create project
+  // Create project - OPRAVENO
   createProject: async (projectData, creatorId) => {
     try {
       debugLog('Creating project:', projectData)
@@ -79,7 +80,8 @@ export const projectsAPI = {
         .select(`
           *,
           client:clients(id, name, email),
-          manager:profiles!projects_manager_id_fkey(id, first_name, last_name)
+          manager:manager_id(id, first_name, last_name),
+          creator:created_by(id, first_name, last_name)
         `)
         .single()
       
@@ -94,7 +96,7 @@ export const projectsAPI = {
     }
   },
 
-  // Update project
+  // Update project - OPRAVENO
   updateProject: async (projectId, updates) => {
     try {
       debugLog('Updating project:', projectId, updates)
@@ -111,7 +113,8 @@ export const projectsAPI = {
         .select(`
           *,
           client:clients(id, name, email),
-          manager:profiles!projects_manager_id_fkey(id, first_name, last_name)
+          manager:manager_id(id, first_name, last_name),
+          creator:created_by(id, first_name, last_name)
         `)
         .single()
       
@@ -150,20 +153,20 @@ export const projectsAPI = {
   // Get project diary entries
   getProjectDiary: async (projectId) => {
     try {
-      debugLog('Fetching project diary for:', projectId)
+      debugLog('Fetching project diary for project:', projectId)
       
       const { data, error } = await supabase
         .from(TABLES.PROJECT_DIARY)
         .select(`
           *,
-          author:profiles(id, first_name, last_name)
+          author:author_id(id, first_name, last_name)
         `)
         .eq('project_id', projectId)
         .order('entry_date', { ascending: false })
       
       if (error) throw error
       
-      debugLog('Project diary fetched:', data?.length || 0, 'entries')
+      debugLog('Project diary entries fetched:', data?.length || 0)
       return { success: true, entries: data || [] }
       
     } catch (error) {
@@ -172,15 +175,14 @@ export const projectsAPI = {
     }
   },
 
-  // Add diary entry
-  addDiaryEntry: async (projectId, entryData, authorId) => {
+  // Create diary entry
+  createDiaryEntry: async (entryData, authorId) => {
     try {
-      debugLog('Adding diary entry for project:', projectId)
+      debugLog('Creating diary entry:', entryData)
       
       const newEntry = {
-        project_id: projectId,
-        author_id: authorId,
         ...entryData,
+        author_id: authorId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }
@@ -190,17 +192,17 @@ export const projectsAPI = {
         .insert([newEntry])
         .select(`
           *,
-          author:profiles(id, first_name, last_name)
+          author:author_id(id, first_name, last_name)
         `)
         .single()
       
       if (error) throw error
       
-      debugLog('Diary entry added:', data)
+      debugLog('Diary entry created:', data)
       return { success: true, entry: data }
       
     } catch (error) {
-      debugError('Failed to add diary entry:', error)
+      debugError('Failed to create diary entry:', error)
       return { success: false, error: error.message }
     }
   },
@@ -208,7 +210,7 @@ export const projectsAPI = {
   // Update diary entry
   updateDiaryEntry: async (entryId, updates) => {
     try {
-      debugLog('Updating diary entry:', entryId)
+      debugLog('Updating diary entry:', entryId, updates)
       
       const updateData = {
         ...updates,
@@ -221,7 +223,7 @@ export const projectsAPI = {
         .eq('id', entryId)
         .select(`
           *,
-          author:profiles(id, first_name, last_name)
+          author:author_id(id, first_name, last_name)
         `)
         .single()
       
