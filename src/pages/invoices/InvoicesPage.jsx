@@ -787,10 +787,9 @@ return (
               </div>
             </div>
           </div>
-        </form>
+    </form>
       </Modal>
     </div>
   )
 }
-
 export default InvoicesPage
