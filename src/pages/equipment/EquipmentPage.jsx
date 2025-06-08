@@ -45,19 +45,15 @@ const EquipmentPage = () => {
       setIsLoading(true)
       const { data, error } = await supabase
         .from('equipment')
-        .select(`
-          *,
-          borrowed_by_user:profiles!equipment_borrowed_by_fkey(first_name, last_name)
-        `)
+        .select('*')
         .order('name')
 
       if (error) throw error
 
+      // Zjednodušená verze bez JOIN
       const equipmentWithDetails = data?.map(item => ({
         ...item,
-        borrowed_by_name: item.borrowed_by_user 
-          ? `${item.borrowed_by_user.first_name} ${item.borrowed_by_user.last_name}`.trim()
-          : null
+        borrowed_by_name: null // Placeholder - můžeme doplnit později
       })) || []
 
       setEquipment(equipmentWithDetails)
@@ -75,7 +71,6 @@ const EquipmentPage = () => {
       const { data, error } = await supabase
         .from('profiles')
         .select('id, first_name, last_name')
-        .eq('role', 'employee')
         .order('first_name')
 
       if (error) throw error
