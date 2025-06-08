@@ -97,31 +97,13 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
     !item.permission || hasPermission(item.permission)
   )
 
-  const getColorClasses = (color, isActive) => {
-    const colorMap = {
-      blue: isActive ? 'from-blue-500 to-blue-600 text-white shadow-blue-500/25' : 'hover:bg-blue-500/10 hover:text-blue-400',
-      green: isActive ? 'from-green-500 to-green-600 text-white shadow-green-500/25' : 'hover:bg-green-500/10 hover:text-green-400',
-      yellow: isActive ? 'from-yellow-500 to-yellow-600 text-white shadow-yellow-500/25' : 'hover:bg-yellow-500/10 hover:text-yellow-400',
-      red: isActive ? 'from-red-500 to-red-600 text-white shadow-red-500/25' : 'hover:bg-red-500/10 hover:text-red-400',
-      purple: isActive ? 'from-purple-500 to-purple-600 text-white shadow-purple-500/25' : 'hover:bg-purple-500/10 hover:text-purple-400',
-      orange: isActive ? 'from-orange-500 to-orange-600 text-white shadow-orange-500/25' : 'hover:bg-orange-500/10 hover:text-orange-400',
-      gray: isActive ? 'from-gray-500 to-gray-600 text-white shadow-gray-500/25' : 'hover:bg-gray-500/10 hover:text-gray-400',
-      teal: isActive ? 'from-teal-500 to-teal-600 text-white shadow-teal-500/25' : 'hover:bg-teal-500/10 hover:text-teal-400',
-      indigo: isActive ? 'from-indigo-500 to-indigo-600 text-white shadow-indigo-500/25' : 'hover:bg-indigo-500/10 hover:text-indigo-400',
-      cyan: isActive ? 'from-cyan-500 to-cyan-600 text-white shadow-cyan-500/25' : 'hover:bg-cyan-500/10 hover:text-cyan-400',
-      pink: isActive ? 'from-pink-500 to-pink-600 text-white shadow-pink-500/25' : 'hover:bg-pink-500/10 hover:text-pink-400',
-      emerald: isActive ? 'from-emerald-500 to-emerald-600 text-white shadow-emerald-500/25' : 'hover:bg-emerald-500/10 hover:text-emerald-400'
-    }
-    return colorMap[color] || colorMap.blue
-  }
-
   return (
     <div className={`h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white transition-all duration-300 ease-in-out ${
       isCollapsed ? 'w-16' : 'w-64'
-    } fixed left-0 top-0 z-40 shadow-2xl border-r border-gray-700/50`}>
+    } fixed left-0 top-0 z-40 shadow-2xl border-r border-gray-700/50 flex flex-col`}>
       
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-700/50 bg-gray-800/50 backdrop-blur-sm">
+      <div className="flex items-center justify-between p-4 border-b border-gray-700/50 bg-gray-800/50 backdrop-blur-sm flex-shrink-0">
         <div className={`flex items-center space-x-3 transition-all duration-300 ${
           isCollapsed ? 'opacity-0 scale-75' : 'opacity-100 scale-100'
         }`}>
@@ -145,8 +127,11 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
         </button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
+      {/* Navigation - s proper scrolling */}
+      <nav className="flex-1 p-4 space-y-2 overflow-y-auto min-h-0" style={{
+        scrollbarWidth: 'thin',
+        scrollbarColor: '#374151 transparent'
+      }}>
         {filteredItems.map((item) => {
           const isActive = location.pathname === item.href || 
                           (item.href !== '/dashboard' && location.pathname.startsWith(item.href))
@@ -157,8 +142,8 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
               to={item.href}
               className={`group flex items-center px-3 py-3 text-sm font-medium rounded-xl transition-all duration-200 relative overflow-hidden ${
                 isActive
-                  ? `bg-gradient-to-r ${getColorClasses(item.color, true)} shadow-lg transform scale-105`
-                  : `text-gray-300 ${getColorClasses(item.color, false)} hover:scale-105`
+                  ? `bg-gradient-to-r from-${item.color}-500 to-${item.color}-600 text-white shadow-lg transform scale-105 shadow-${item.color}-500/25`
+                  : `text-gray-300 hover:bg-${item.color}-500/10 hover:text-${item.color}-400 hover:scale-105`
               }`}
               title={isCollapsed ? item.name : undefined}
             >
@@ -176,14 +161,14 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
               
               {/* Label */}
               <span className={`${
-                isCollapsed ? 'opacity-0 absolute left-full ml-6 bg-gray-800 px-2 py-1 rounded-lg shadow-lg group-hover:opacity-100' : 'opacity-100'
+                isCollapsed ? 'opacity-0 absolute left-full ml-6 bg-gray-800 px-2 py-1 rounded-lg shadow-lg group-hover:opacity-100 whitespace-nowrap z-50' : 'opacity-100'
               } transition-all duration-300 whitespace-nowrap font-medium relative z-10`}>
                 {item.name}
               </span>
 
               {/* Hover effect background */}
               {!isActive && (
-                <div className={`absolute inset-0 bg-gradient-to-r from-${item.color}-500/10 to-${item.color}-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-xl`} />
+                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/5 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-xl" />
               )}
 
               {/* Subtle shine effect for active items */}
@@ -195,8 +180,8 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-gray-700/50 bg-gray-800/30 backdrop-blur-sm">
+      {/* Footer - fixed at bottom */}
+      <div className="p-4 border-t border-gray-700/50 bg-gray-800/30 backdrop-blur-sm flex-shrink-0">
         <NavLink
           to="/settings"
           className={`group flex items-center px-3 py-3 text-sm font-medium rounded-xl transition-all duration-200 mb-3 ${
@@ -212,7 +197,7 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
             <i className="fas fa-cog group-hover:rotate-180 transition-transform duration-500" />
           </div>
           <span className={`${
-            isCollapsed ? 'opacity-0 absolute left-full ml-6 bg-gray-800 px-2 py-1 rounded-lg shadow-lg group-hover:opacity-100' : 'opacity-100'
+            isCollapsed ? 'opacity-0 absolute left-full ml-6 bg-gray-800 px-2 py-1 rounded-lg shadow-lg group-hover:opacity-100 whitespace-nowrap z-50' : 'opacity-100'
           } transition-all duration-300 font-medium`}>
             Nastavení
           </span>
@@ -237,6 +222,23 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
           </div>
         )}
       </div>
+
+      {/* Custom scrollbar styles */}
+      <style jsx>{`
+        nav::-webkit-scrollbar {
+          width: 4px;
+        }
+        nav::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        nav::-webkit-scrollbar-thumb {
+          background: #374151;
+          border-radius: 2px;
+        }
+        nav::-webkit-scrollbar-thumb:hover {
+          background: #4B5563;
+        }
+      `}</style>
     </div>
   )
 }
