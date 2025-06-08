@@ -19,7 +19,7 @@ const ClientsPage = () => {
     type: ''
   })
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm({
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm({
     defaultValues: {
       name: '',
       type: 'company',
@@ -34,6 +34,9 @@ const ClientsPage = () => {
       notes: ''
     }
   })
+
+  // Watch all form values safely
+  const formValues = watch()
 
   // Load clients on mount
   useEffect(() => {
@@ -559,26 +562,26 @@ const ClientsPage = () => {
             />
           </div>
 
-          {/* Preview */}
+          {/* Preview - OPRAVENO: používáme formValues místo watch() */}
           <div className="bg-gray-50 rounded-lg p-4">
             <h4 className="font-medium text-gray-900 mb-3">Náhled kontaktních údajů</h4>
             <div className="text-sm text-gray-600">
               <div className="font-medium">
-                {watch('name') || 'Název klienta'}
+                {formValues.name || 'Název klienta'}
               </div>
-              {watch('type') === 'company' && watch('ico') && (
-                <div>IČO: {watch('ico')}</div>
+              {formValues.type === 'company' && formValues.ico && (
+                <div>IČO: {formValues.ico}</div>
               )}
-              {watch('email') && (
-                <div>{watch('email')}</div>
+              {formValues.email && (
+                <div>{formValues.email}</div>
               )}
-              {watch('phone') && (
-                <div>{watch('phone')}</div>
+              {formValues.phone && (
+                <div>{formValues.phone}</div>
               )}
-              {watch('address') && (
+              {formValues.address && (
                 <div className="mt-2">
-                  <div>{watch('address')}</div>
-                  <div>{watch('postal_code')} {watch('city')}</div>
+                  <div>{formValues.address}</div>
+                  <div>{formValues.postal_code} {formValues.city}</div>
                 </div>
               )}
             </div>
