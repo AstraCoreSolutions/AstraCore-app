@@ -29,7 +29,7 @@ const useProjectsStore = create((set, get) => ({
   
   setFilters: (filters) => set({ filters: { ...get().filters, ...filters } }),
   
-  // Load all projects
+  // Load all projects - BEZ JOINŮ
   loadProjects: async (userId, userRole) => {
     set({ isLoading: true, error: null })
     
@@ -38,11 +38,7 @@ const useProjectsStore = create((set, get) => ({
       
       let query = supabase
         .from(TABLES.PROJECTS)
-        .select(`
-          *,
-          client:clients(id, name, email),
-          manager:profiles!projects_manager_id_fkey(id, first_name, last_name)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
       
       // Filter based on user role
@@ -51,12 +47,57 @@ const useProjectsStore = create((set, get) => ({
         query = query.contains('assigned_employees', [userId])
       }
       
-      const { data, error } = await query
+      const { data: projects, error } = await query
       
       if (error) throw error
       
-      debugLog('Projects loaded:', data?.length || 0)
-      set({ projects: data || [], isLoading: false })
+      // Load related data separately
+      const projectsWithRelations = await Promise.all(
+        (projects || []).map(async (project) => {
+          // Load client
+          let client = null
+          if (project.client_id) {
+            const { data: clientData } = await supabase
+              .from('clients')
+              .select('id, name, email')
+              .eq('id', project.client_id)
+              .single()
+            client = clientData
+          }
+          
+          // Load manager
+          let manager = null
+          if (project.manager_id) {
+            const { data: managerData } = await supabase
+              .from('profiles')
+              .select('id, first_name, last_name')
+              .eq('id', project.manager_id)
+              .single()
+            manager = managerData
+          }
+          
+          // Load creator
+          let creator = null
+          if (project.created_by) {
+            const { data: creatorData } = await supabase
+              .from('profiles')
+              .select('id, first_name, last_name')
+              .eq('id', project.created_by)
+              .single()
+            creator = creatorData
+          }
+          
+          return {
+            ...project,
+            client,
+            manager,
+            creator
+          }
+        })
+      )
+      
+      debugLog('Projects loaded:', projectsWithRelations?.length || 0)
+      set({ projects: projectsWithRelations || [], isLoading: false })
       
     } catch (error) {
       debugError('Failed to load projects:', error)
@@ -64,30 +105,74 @@ const useProjectsStore = create((set, get) => ({
     }
   },
   
-  // Load single project
+  // Load single project - BEZ JOINŮ
   loadProject: async (projectId) => {
     set({ isLoading: true, error: null })
     
     try {
       debugLog('Loading project:', projectId)
       
-      const { data, error } = await supabase
+      const { data: project, error } = await supabase
         .from(TABLES.PROJECTS)
-        .select(`
-          *,
-          client:clients(id, name, email, phone, address),
-          manager:profiles!projects_manager_id_fkey(id, first_name, last_name, email, phone),
-          assigned_employees_data:profiles!inner(id, first_name, last_name, position)
-        `)
+        .select('*')
         .eq('id', projectId)
         .single()
       
       if (error) throw error
       
-      debugLog('Project loaded:', data)
-      set({ currentProject: data, isLoading: false })
+      // Load related data separately
+      let client = null
+      if (project.client_id) {
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('id, name, email, phone, address')
+          .eq('id', project.client_id)
+          .single()
+        client = clientData
+      }
       
-      return data
+      let manager = null
+      if (project.manager_id) {
+        const { data: managerData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, email, phone')
+          .eq('id', project.manager_id)
+          .single()
+        manager = managerData
+      }
+      
+      let creator = null
+      if (project.created_by) {
+        const { data: creatorData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, email')
+          .eq('id', project.created_by)
+          .single()
+        creator = creatorData
+      }
+      
+      // Load assigned employees if they exist
+      let assigned_employees_data = []
+      if (project.assigned_employees && project.assigned_employees.length > 0) {
+        const { data: employeesData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, position')
+          .in('id', project.assigned_employees)
+        assigned_employees_data = employeesData || []
+      }
+      
+      const projectWithRelations = {
+        ...project,
+        client,
+        manager,
+        creator,
+        assigned_employees_data
+      }
+      
+      debugLog('Project loaded:', projectWithRelations)
+      set({ currentProject: projectWithRelations, isLoading: false })
+      
+      return projectWithRelations
       
     } catch (error) {
       debugError('Failed to load project:', error)
@@ -96,7 +181,7 @@ const useProjectsStore = create((set, get) => ({
     }
   },
   
-  // Create new project
+  // Create new project - BEZ JOINŮ
   createProject: async (projectData, creatorId) => {
     set({ isLoading: true, error: null })
     
@@ -112,27 +197,61 @@ const useProjectsStore = create((set, get) => ({
         updated_at: new Date().toISOString()
       }
       
-      const { data, error } = await supabase
+      const { data: project, error } = await supabase
         .from(TABLES.PROJECTS)
         .insert([newProject])
-        .select(`
-          *,
-          client:clients(id, name, email),
-          manager:profiles!projects_manager_id_fkey(id, first_name, last_name)
-        `)
+        .select('*')
         .single()
       
       if (error) throw error
       
-      debugLog('Project created:', data)
+      // Load related data separately
+      let client = null
+      if (project.client_id) {
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('id, name, email')
+          .eq('id', project.client_id)
+          .single()
+        client = clientData
+      }
+      
+      let manager = null
+      if (project.manager_id) {
+        const { data: managerData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .eq('id', project.manager_id)
+          .single()
+        manager = managerData
+      }
+      
+      let creator = null
+      if (project.created_by) {
+        const { data: creatorData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .eq('id', project.created_by)
+          .single()
+        creator = creatorData
+      }
+      
+      const projectWithRelations = {
+        ...project,
+        client,
+        manager,
+        creator
+      }
+      
+      debugLog('Project created:', projectWithRelations)
       
       // Add to projects list
       set(state => ({
-        projects: [data, ...state.projects],
+        projects: [projectWithRelations, ...state.projects],
         isLoading: false
       }))
       
-      return { success: true, project: data }
+      return { success: true, project: projectWithRelations }
       
     } catch (error) {
       debugError('Failed to create project:', error)
@@ -141,7 +260,7 @@ const useProjectsStore = create((set, get) => ({
     }
   },
   
-  // Update project
+  // Update project - BEZ JOINŮ
   updateProject: async (projectId, updates) => {
     set({ isLoading: true, error: null })
     
@@ -153,29 +272,63 @@ const useProjectsStore = create((set, get) => ({
         updated_at: new Date().toISOString()
       }
       
-      const { data, error } = await supabase
+      const { data: project, error } = await supabase
         .from(TABLES.PROJECTS)
         .update(updateData)
         .eq('id', projectId)
-        .select(`
-          *,
-          client:clients(id, name, email),
-          manager:profiles!projects_manager_id_fkey(id, first_name, last_name)
-        `)
+        .select('*')
         .single()
       
       if (error) throw error
       
-      debugLog('Project updated:', data)
+      // Load related data separately
+      let client = null
+      if (project.client_id) {
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('id, name, email')
+          .eq('id', project.client_id)
+          .single()
+        client = clientData
+      }
+      
+      let manager = null
+      if (project.manager_id) {
+        const { data: managerData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .eq('id', project.manager_id)
+          .single()
+        manager = managerData
+      }
+      
+      let creator = null
+      if (project.created_by) {
+        const { data: creatorData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .eq('id', project.created_by)
+          .single()
+        creator = creatorData
+      }
+      
+      const projectWithRelations = {
+        ...project,
+        client,
+        manager,
+        creator
+      }
+      
+      debugLog('Project updated:', projectWithRelations)
       
       // Update in projects list
       set(state => ({
-        projects: state.projects.map(p => p.id === projectId ? data : p),
-        currentProject: state.currentProject?.id === projectId ? data : state.currentProject,
+        projects: state.projects.map(p => p.id === projectId ? projectWithRelations : p),
+        currentProject: state.currentProject?.id === projectId ? projectWithRelations : state.currentProject,
         isLoading: false
       }))
       
-      return { success: true, project: data }
+      return { success: true, project: projectWithRelations }
       
     } catch (error) {
       debugError('Failed to update project:', error)
@@ -216,26 +369,43 @@ const useProjectsStore = create((set, get) => ({
     }
   },
   
-  // Load project diary entries
+  // Load project diary entries - BEZ JOINŮ
   loadProjectDiary: async (projectId) => {
     set({ isLoading: true, error: null })
     
     try {
       debugLog('Loading project diary for:', projectId)
       
-      const { data, error } = await supabase
+      const { data: entries, error } = await supabase
         .from(TABLES.PROJECT_DIARY)
-        .select(`
-          *,
-          author:profiles(id, first_name, last_name)
-        `)
+        .select('*')
         .eq('project_id', projectId)
         .order('entry_date', { ascending: false })
       
       if (error) throw error
       
-      debugLog('Project diary loaded:', data?.length || 0, 'entries')
-      set({ projectDiary: data || [], isLoading: false })
+      // Load authors separately
+      const entriesWithAuthors = await Promise.all(
+        (entries || []).map(async (entry) => {
+          let author = null
+          if (entry.author_id) {
+            const { data: authorData } = await supabase
+              .from('profiles')
+              .select('id, first_name, last_name')
+              .eq('id', entry.author_id)
+              .single()
+            author = authorData
+          }
+          
+          return {
+            ...entry,
+            author
+          }
+        })
+      )
+      
+      debugLog('Project diary loaded:', entriesWithAuthors?.length || 0, 'entries')
+      set({ projectDiary: entriesWithAuthors || [], isLoading: false })
       
     } catch (error) {
       debugError('Failed to load project diary:', error)
@@ -243,7 +413,7 @@ const useProjectsStore = create((set, get) => ({
     }
   },
   
-  // Add diary entry
+  // Add diary entry - BEZ JOINŮ
   addDiaryEntry: async (projectId, entryData, authorId) => {
     set({ isLoading: true, error: null })
     
@@ -258,26 +428,39 @@ const useProjectsStore = create((set, get) => ({
         updated_at: new Date().toISOString()
       }
       
-      const { data, error } = await supabase
+      const { data: entry, error } = await supabase
         .from(TABLES.PROJECT_DIARY)
         .insert([newEntry])
-        .select(`
-          *,
-          author:profiles(id, first_name, last_name)
-        `)
+        .select('*')
         .single()
       
       if (error) throw error
       
-      debugLog('Diary entry added:', data)
+      // Load author separately
+      let author = null
+      if (entry.author_id) {
+        const { data: authorData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .eq('id', entry.author_id)
+          .single()
+        author = authorData
+      }
+      
+      const entryWithAuthor = {
+        ...entry,
+        author
+      }
+      
+      debugLog('Diary entry added:', entryWithAuthor)
       
       // Add to diary entries
       set(state => ({
-        projectDiary: [data, ...state.projectDiary],
+        projectDiary: [entryWithAuthor, ...state.projectDiary],
         isLoading: false
       }))
       
-      return { success: true, entry: data }
+      return { success: true, entry: entryWithAuthor }
       
     } catch (error) {
       debugError('Failed to add diary entry:', error)
@@ -286,44 +469,88 @@ const useProjectsStore = create((set, get) => ({
     }
   },
   
-  // Update diary entry
+  // Update diary entry - BEZ JOINŮ
   updateDiaryEntry: async (entryId, updates) => {
     set({ isLoading: true, error: null })
     
     try {
-      debugLog('Updating diary entry:', entryId)
+      debugLog('Updating diary entry:', entryId, updates)
       
       const updateData = {
         ...updates,
         updated_at: new Date().toISOString()
       }
       
-      const { data, error } = await supabase
+      const { data: entry, error } = await supabase
         .from(TABLES.PROJECT_DIARY)
         .update(updateData)
         .eq('id', entryId)
-        .select(`
-          *,
-          author:profiles(id, first_name, last_name)
-        `)
+        .select('*')
         .single()
       
       if (error) throw error
       
-      debugLog('Diary entry updated:', data)
+      // Load author separately
+      let author = null
+      if (entry.author_id) {
+        const { data: authorData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .eq('id', entry.author_id)
+          .single()
+        author = authorData
+      }
+      
+      const entryWithAuthor = {
+        ...entry,
+        author
+      }
+      
+      debugLog('Diary entry updated:', entryWithAuthor)
       
       // Update in diary entries
       set(state => ({
-        projectDiary: state.projectDiary.map(entry => 
-          entry.id === entryId ? data : entry
+        projectDiary: state.projectDiary.map(e => 
+          e.id === entryId ? entryWithAuthor : e
         ),
         isLoading: false
       }))
       
-      return { success: true, entry: data }
+      return { success: true, entry: entryWithAuthor }
       
     } catch (error) {
       debugError('Failed to update diary entry:', error)
+      set({ error: error.message, isLoading: false })
+      return { success: false, error: error.message }
+    }
+  },
+  
+  // Delete diary entry
+  deleteDiaryEntry: async (entryId) => {
+    set({ isLoading: true, error: null })
+    
+    try {
+      debugLog('Deleting diary entry:', entryId)
+      
+      const { error } = await supabase
+        .from(TABLES.PROJECT_DIARY)
+        .delete()
+        .eq('id', entryId)
+      
+      if (error) throw error
+      
+      debugLog('Diary entry deleted')
+      
+      // Remove from diary entries
+      set(state => ({
+        projectDiary: state.projectDiary.filter(e => e.id !== entryId),
+        isLoading: false
+      }))
+      
+      return { success: true }
+      
+    } catch (error) {
+      debugError('Failed to delete diary entry:', error)
       set({ error: error.message, isLoading: false })
       return { success: false, error: error.message }
     }
