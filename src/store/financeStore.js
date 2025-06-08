@@ -1,81 +1,167 @@
 import { create } from 'zustand'
-import { supabase, TABLES } from '../config/supabase.js'
-import { TRANSACTION_TYPES } from '../utils/constants.js'
-import { debugLog, debugError } from '../utils/helpers.js'
+import { financeApi } from '../services/api/finance'
+import { debugLog, debugError } from '../utils/helpers'
+import toast from 'react-hot-toast'
 
 const useFinanceStore = create((set, get) => ({
   // State
   transactions: [],
   invoices: [],
+  currentTransaction: null,
+  currentInvoice: null,
+  financialSummary: null,
+  monthlyData: [],
+  transactionCategories: [],
   isLoading: false,
   error: null,
   filters: {
-    type: '',
-    category: '',
-    dateFrom: '',
-    dateTo: '',
-    search: ''
-  },
-  
-  // Actions
-  setLoading: (isLoading) => set({ isLoading }),
-  
-  setError: (error) => {
-    debugError('Finance error:', error)
-    set({ error })
-  },
-  
-  clearError: () => set({ error: null }),
-  
-  setFilters: (filters) => set({ filters: { ...get().filters, ...filters } }),
-  
-  // Load all transactions
-  loadTransactions: async () => {
-    set({ isLoading: true, error: null })
-    
-    try {
-      debugLog('Loading transactions...')
-      
-      const { data, error } = await supabase
-        .from(TABLES.TRANSACTIONS)
-        .select('*')
-        .order('transaction_date', { ascending: false })
-        .limit(200)
-      
-      if (error) throw error
-      
-      debugLog('Transactions loaded:', data?.length || 0)
-      set({ transactions: data || [], isLoading: false })
-      
-    } catch (error) {
-      debugError('Failed to load transactions:', error)
-      set({ error: error.message, isLoading: false })
+    transactions: {
+      search: '',
+      type: '',
+      category: '',
+      project_id: '',
+      date_from: '',
+      date_to: ''
+    },
+    invoices: {
+      search: '',
+      status: '',
+      client_id: '',
+      project_id: '',
+      date_from: '',
+      date_to: '',
+      overdue: false
     }
   },
-  
-  // Add transaction
-  addTransaction: async (transactionData, userId) => {
+
+  // Actions
+  setTransactionFilters: (newFilters) => {
+    set(state => ({
+      filters: { 
+        ...state.filters, 
+        transactions: { ...state.filters.transactions, ...newFilters }
+      }
+    }))
+    get().loadTransactions()
+  },
+
+  setInvoiceFilters: (newFilters) => {
+    set(state => ({
+      filters: { 
+        ...state.filters, 
+        invoices: { ...state.filters.invoices, ...newFilters }
+      }
+    }))
+    get().loadInvoices()
+  },
+
+  clearTransactionFilters: () => {
+    set(state => ({
+      filters: {
+        ...state.filters,
+        transactions: {
+          search: '',
+          type: '',
+          category: '',
+          project_id: '',
+          date_from: '',
+          date_to: ''
+        }
+      }
+    }))
+    get().loadTransactions()
+  },
+
+  clearInvoiceFilters: () => {
+    set(state => ({
+      filters: {
+        ...state.filters,
+        invoices: {
+          search: '',
+          status: '',
+          client_id: '',
+          project_id: '',
+          date_from: '',
+          date_to: '',
+          overdue: false
+        }
+      }
+    }))
+    get().loadInvoices()
+  },
+
+  // TRANSACTIONS
+
+  // Load all transactions
+  loadTransactions: async (forceRefresh = false) => {
+    const state = get()
+    
+    if (state.isLoading && !forceRefresh) return
+    
     set({ isLoading: true, error: null })
     
     try {
-      debugLog('Adding transaction:', transactionData)
+      debugLog('Loading transactions with filters:', state.filters.transactions)
       
-      const newTransaction = {
-        ...transactionData,
-        created_by: userId,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
+      const { data, error } = await financeApi.getTransactions(state.filters.transactions)
       
-      const { data, error } = await supabase
-        .from(TABLES.TRANSACTIONS)
-        .insert([newTransaction])
-        .select()
-        .single()
+      if (error) throw new Error(error)
       
-      if (error) throw error
+      set({ 
+        transactions: data || [],
+        isLoading: false 
+      })
       
-      debugLog('Transaction added:', data)
+      debugLog('Transactions loaded:', data?.length)
+    } catch (error) {
+      debugError('Failed to load transactions:', error)
+      set({ 
+        error: error.message,
+        isLoading: false 
+      })
+      toast.error('Nepodařilo se načíst transakce')
+    }
+  },
+
+  // Load single transaction
+  loadTransaction: async (id) => {
+    set({ isLoading: true, error: null })
+    
+    try {
+      debugLog('Loading transaction:', id)
+      
+      const { data, error } = await financeApi.getTransactionById(id)
+      
+      if (error) throw new Error(error)
+      
+      set({ 
+        currentTransaction: data,
+        isLoading: false 
+      })
+      
+      debugLog('Transaction loaded:', data?.description)
+      return { success: true, data }
+    } catch (error) {
+      debugError('Failed to load transaction:', error)
+      set({ 
+        error: error.message,
+        isLoading: false 
+      })
+      toast.error('Nepodařilo se načíst transakci')
+      return { success: false, error: error.message }
+    }
+  },
+
+  // Create new transaction
+  createTransaction: async (transactionData) => {
+    set({ isLoading: true, error: null })
+    
+    try {
+      debugLog('Creating transaction:', transactionData.description)
+      
+      const { data, error } = await financeApi.createTransaction(transactionData)
+      
+      if (error) throw new Error(error)
       
       // Add to transactions list
       set(state => ({
@@ -83,195 +169,374 @@ const useFinanceStore = create((set, get) => ({
         isLoading: false
       }))
       
-      return { success: true, transaction: data }
-      
+      toast.success('Transakce byla úspěšně vytvořena')
+      debugLog('Transaction created:', data.description)
+      return { success: true, data }
     } catch (error) {
-      debugError('Failed to add transaction:', error)
-      set({ error: error.message, isLoading: false })
+      debugError('Failed to create transaction:', error)
+      set({ 
+        error: error.message,
+        isLoading: false 
+      })
+      toast.error('Nepodařilo se vytvořit transakci')
       return { success: false, error: error.message }
     }
   },
-  
+
   // Update transaction
-  updateTransaction: async (transactionId, updates) => {
+  updateTransaction: async (id, updates) => {
     set({ isLoading: true, error: null })
     
     try {
-      debugLog('Updating transaction:', transactionId, updates)
+      debugLog('Updating transaction:', id)
       
-      const updateData = {
-        ...updates,
-        updated_at: new Date().toISOString()
-      }
+      const { data, error } = await financeApi.updateTransaction(id, updates)
       
-      const { data, error } = await supabase
-        .from(TABLES.TRANSACTIONS)
-        .update(updateData)
-        .eq('id', transactionId)
-        .select()
-        .single()
-      
-      if (error) throw error
-      
-      debugLog('Transaction updated:', data)
+      if (error) throw new Error(error)
       
       // Update in transactions list
       set(state => ({
-        transactions: state.transactions.map(t => t.id === transactionId ? data : t),
+        transactions: state.transactions.map(transaction => 
+          transaction.id === id ? data : transaction
+        ),
+        currentTransaction: state.currentTransaction?.id === id ? data : state.currentTransaction,
         isLoading: false
       }))
       
-      return { success: true, transaction: data }
-      
+      toast.success('Transakce byla úspěšně aktualizována')
+      debugLog('Transaction updated:', data.description)
+      return { success: true, data }
     } catch (error) {
       debugError('Failed to update transaction:', error)
-      set({ error: error.message, isLoading: false })
+      set({ 
+        error: error.message,
+        isLoading: false 
+      })
+      toast.error('Nepodařilo se aktualizovat transakci')
       return { success: false, error: error.message }
     }
   },
-  
+
   // Delete transaction
-  deleteTransaction: async (transactionId) => {
+  deleteTransaction: async (id) => {
     set({ isLoading: true, error: null })
     
     try {
-      debugLog('Deleting transaction:', transactionId)
+      debugLog('Deleting transaction:', id)
       
-      const { error } = await supabase
-        .from(TABLES.TRANSACTIONS)
-        .delete()
-        .eq('id', transactionId)
+      const { data, error } = await financeApi.deleteTransaction(id)
       
-      if (error) throw error
-      
-      debugLog('Transaction deleted')
+      if (error) throw new Error(error)
       
       // Remove from transactions list
       set(state => ({
-        transactions: state.transactions.filter(t => t.id !== transactionId),
+        transactions: state.transactions.filter(transaction => transaction.id !== id),
+        currentTransaction: state.currentTransaction?.id === id ? null : state.currentTransaction,
         isLoading: false
       }))
       
+      toast.success('Transakce byla úspěšně smazána')
+      debugLog('Transaction deleted')
       return { success: true }
-      
     } catch (error) {
       debugError('Failed to delete transaction:', error)
-      set({ error: error.message, isLoading: false })
+      set({ 
+        error: error.message,
+        isLoading: false 
+      })
+      toast.error('Nepodařilo se smazat transakci')
       return { success: false, error: error.message }
     }
   },
-  
-  // Get filtered transactions
-  getFilteredTransactions: () => {
-    const { transactions, filters } = get()
+
+  // INVOICES
+
+  // Load all invoices
+  loadInvoices: async (forceRefresh = false) => {
+    const state = get()
     
-    return transactions.filter(transaction => {
-      // Type filter
-      if (filters.type && transaction.type !== filters.type) {
-        return false
-      }
+    if (state.isLoading && !forceRefresh) return
+    
+    set({ isLoading: true, error: null })
+    
+    try {
+      debugLog('Loading invoices with filters:', state.filters.invoices)
       
-      // Category filter
-      if (filters.category && transaction.category !== filters.category) {
-        return false
-      }
+      const { data, error } = await financeApi.getInvoices(state.filters.invoices)
       
-      // Date range filter
-      if (filters.dateFrom) {
-        const transactionDate = new Date(transaction.transaction_date)
-        const fromDate = new Date(filters.dateFrom)
-        if (transactionDate < fromDate) return false
-      }
+      if (error) throw new Error(error)
       
-      if (filters.dateTo) {
-        const transactionDate = new Date(transaction.transaction_date)
-        const toDate = new Date(filters.dateTo)
-        if (transactionDate > toDate) return false
-      }
+      set({ 
+        invoices: data || [],
+        isLoading: false 
+      })
       
-      // Search filter
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase()
-        const searchFields = [
-          transaction.description,
-          transaction.category,
-          transaction.note
-        ].filter(Boolean)
-        
-        const matchesSearch = searchFields.some(field => 
-          field.toLowerCase().includes(searchLower)
-        )
-        
-        if (!matchesSearch) return false
-      }
-      
-      return true
-    })
-  },
-  
-  // Get financial statistics
-  getFinancialStats: () => {
-    const { transactions } = get()
-    const currentMonth = new Date().getMonth()
-    const currentYear = new Date().getFullYear()
-    
-    const monthlyTransactions = transactions.filter(t => {
-      const date = new Date(t.transaction_date)
-      return date.getMonth() === currentMonth && date.getFullYear() === currentYear
-    })
-    
-    const monthlyIncome = monthlyTransactions
-      .filter(t => t.type === TRANSACTION_TYPES.INCOME)
-      .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0)
-    
-    const monthlyExpenses = monthlyTransactions
-      .filter(t => t.type === TRANSACTION_TYPES.EXPENSE)
-      .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0)
-    
-    const totalIncome = transactions
-      .filter(t => t.type === TRANSACTION_TYPES.INCOME)
-      .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0)
-    
-    const totalExpenses = transactions
-      .filter(t => t.type === TRANSACTION_TYPES.EXPENSE)
-      .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0)
-    
-    return {
-      monthlyIncome,
-      monthlyExpenses,
-      monthlyProfit: monthlyIncome - monthlyExpenses,
-      totalIncome,
-      totalExpenses,
-      totalProfit: totalIncome - totalExpenses,
-      transactionCount: transactions.length
+      debugLog('Invoices loaded:', data?.length)
+    } catch (error) {
+      debugError('Failed to load invoices:', error)
+      set({ 
+        error: error.message,
+        isLoading: false 
+      })
+      toast.error('Nepodařilo se načíst faktury')
     }
   },
-  
-  // Get transactions by category
-  getTransactionsByCategory: () => {
-    const { transactions } = get()
-    const categories = {}
+
+  // Load single invoice
+  loadInvoice: async (id) => {
+    set({ isLoading: true, error: null })
     
-    transactions.forEach(transaction => {
-      const category = transaction.category || 'Ostatní'
-      if (!categories[category]) {
-        categories[category] = {
-          income: 0,
-          expense: 0,
-          count: 0
-        }
-      }
+    try {
+      debugLog('Loading invoice:', id)
       
-      categories[category].count++
+      const { data, error } = await financeApi.getInvoiceById(id)
       
-      if (transaction.type === TRANSACTION_TYPES.INCOME) {
-        categories[category].income += parseFloat(transaction.amount) || 0
-      } else {
-        categories[category].expense += parseFloat(transaction.amount) || 0
-      }
-    })
+      if (error) throw new Error(error)
+      
+      set({ 
+        currentInvoice: data,
+        isLoading: false 
+      })
+      
+      debugLog('Invoice loaded:', data?.invoice_number)
+      return { success: true, data }
+    } catch (error) {
+      debugError('Failed to load invoice:', error)
+      set({ 
+        error: error.message,
+        isLoading: false 
+      })
+      toast.error('Nepodařilo se načíst fakturu')
+      return { success: false, error: error.message }
+    }
+  },
+
+  // Create new invoice
+  createInvoice: async (invoiceData) => {
+    set({ isLoading: true, error: null })
     
-    return categories
+    try {
+      debugLog('Creating invoice')
+      
+      const { data, error } = await financeApi.createInvoice(invoiceData)
+      
+      if (error) throw new Error(error)
+      
+      // Add to invoices list
+      set(state => ({
+        invoices: [data, ...state.invoices],
+        isLoading: false
+      }))
+      
+      toast.success('Faktura byla úspěšně vytvořena')
+      debugLog('Invoice created:', data.invoice_number)
+      return { success: true, data }
+    } catch (error) {
+      debugError('Failed to create invoice:', error)
+      set({ 
+        error: error.message,
+        isLoading: false 
+      })
+      toast.error('Nepodařilo se vytvořit fakturu')
+      return { success: false, error: error.message }
+    }
+  },
+
+  // Update invoice
+  updateInvoice: async (id, updates) => {
+    set({ isLoading: true, error: null })
+    
+    try {
+      debugLog('Updating invoice:', id)
+      
+      const { data, error } = await financeApi.updateInvoice(id, updates)
+      
+      if (error) throw new Error(error)
+      
+      // Update in invoices list
+      set(state => ({
+        invoices: state.invoices.map(invoice => 
+          invoice.id === id ? data : invoice
+        ),
+        currentInvoice: state.currentInvoice?.id === id ? data : state.currentInvoice,
+        isLoading: false
+      }))
+      
+      toast.success('Faktura byla úspěšně aktualizována')
+      debugLog('Invoice updated:', data.invoice_number)
+      return { success: true, data }
+    } catch (error) {
+      debugError('Failed to update invoice:', error)
+      set({ 
+        error: error.message,
+        isLoading: false 
+      })
+      toast.error('Nepodařilo se aktualizovat fakturu')
+      return { success: false, error: error.message }
+    }
+  },
+
+  // Delete invoice
+  deleteInvoice: async (id) => {
+    set({ isLoading: true, error: null })
+    
+    try {
+      debugLog('Deleting invoice:', id)
+      
+      const { data, error } = await financeApi.deleteInvoice(id)
+      
+      if (error) throw new Error(error)
+      
+      // Remove from invoices list
+      set(state => ({
+        invoices: state.invoices.filter(invoice => invoice.id !== id),
+        currentInvoice: state.currentInvoice?.id === id ? null : state.currentInvoice,
+        isLoading: false
+      }))
+      
+      toast.success('Faktura byla úspěšně smazána')
+      debugLog('Invoice deleted')
+      return { success: true }
+    } catch (error) {
+      debugError('Failed to delete invoice:', error)
+      set({ 
+        error: error.message,
+        isLoading: false 
+      })
+      toast.error(error.message || 'Nepodařilo se smazat fakturu')
+      return { success: false, error: error.message }
+    }
+  },
+
+  // Mark invoice as paid
+  markInvoiceAsPaid: async (id, paidAmount = null, paymentDate = null) => {
+    try {
+      debugLog('Marking invoice as paid:', id)
+      
+      const { data, error } = await financeApi.markInvoiceAsPaid(id, paidAmount, paymentDate)
+      
+      if (error) throw new Error(error)
+      
+      // Update in invoices list
+      set(state => ({
+        invoices: state.invoices.map(invoice => 
+          invoice.id === id ? data : invoice
+        ),
+        currentInvoice: state.currentInvoice?.id === id ? data : state.currentInvoice
+      }))
+      
+      toast.success('Faktura byla označena jako zaplacená')
+      debugLog('Invoice marked as paid')
+      return { success: true, data }
+    } catch (error) {
+      debugError('Failed to mark invoice as paid:', error)
+      toast.error('Nepodařilo se označit fakturu jako zaplacenou')
+      return { success: false, error: error.message }
+    }
+  },
+
+  // REPORTS
+
+  // Load financial summary
+  loadFinancialSummary: async (dateFrom, dateTo) => {
+    try {
+      debugLog('Loading financial summary:', dateFrom, dateTo)
+      
+      const { data, error } = await financeApi.getFinancialSummary(dateFrom, dateTo)
+      
+      if (error) throw new Error(error)
+      
+      set({ financialSummary: data })
+      
+      debugLog('Financial summary loaded')
+      return { success: true, data }
+    } catch (error) {
+      debugError('Failed to load financial summary:', error)
+      return { success: false, error: error.message }
+    }
+  },
+
+  // Load monthly data
+  loadMonthlyData: async (year) => {
+    try {
+      debugLog('Loading monthly data for year:', year)
+      
+      const { data, error } = await financeApi.getMonthlyData(year)
+      
+      if (error) throw new Error(error)
+      
+      set({ monthlyData: data || [] })
+      
+      debugLog('Monthly data loaded')
+      return { success: true, data }
+    } catch (error) {
+      debugError('Failed to load monthly data:', error)
+      return { success: false, error: error.message }
+    }
+  },
+
+  // Load transaction categories
+  loadTransactionCategories: async () => {
+    try {
+      debugLog('Loading transaction categories')
+      
+      const { data, error } = await financeApi.getTransactionCategories()
+      
+      if (error) throw new Error(error)
+      
+      set({ transactionCategories: data || [] })
+      
+      debugLog('Transaction categories loaded:', data?.length)
+    } catch (error) {
+      debugError('Failed to load transaction categories:', error)
+    }
+  },
+
+  // Clear current items
+  clearCurrentTransaction: () => {
+    set({ currentTransaction: null })
+  },
+
+  clearCurrentInvoice: () => {
+    set({ currentInvoice: null })
+  },
+
+  // Get overview statistics
+  getFinanceOverview: () => {
+    const state = get()
+    const { transactions, invoices } = state
+    
+    const totalIncome = transactions
+      ?.filter(t => t.type === 'income')
+      ?.reduce((sum, t) => sum + t.amount, 0) || 0
+    
+    const totalExpenses = transactions
+      ?.filter(t => t.type === 'expense')
+      ?.reduce((sum, t) => sum + t.amount, 0) || 0
+    
+    const totalInvoiced = invoices
+      ?.reduce((sum, i) => sum + i.total_amount, 0) || 0
+    
+    const paidInvoices = invoices
+      ?.filter(i => i.status === 'paid').length || 0
+    
+    const pendingInvoices = invoices
+      ?.filter(i => i.status === 'pending').length || 0
+    
+    const overdueInvoices = invoices
+      ?.filter(i => i.status === 'overdue').length || 0
+    
+    return {
+      totalIncome,
+      totalExpenses,
+      profit: totalIncome - totalExpenses,
+      totalInvoiced,
+      paidInvoices,
+      pendingInvoices,
+      overdueInvoices,
+      totalTransactions: transactions?.length || 0,
+      totalInvoices: invoices?.length || 0
+    }
   }
 }))
 
