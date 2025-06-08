@@ -104,7 +104,7 @@ const InvoicesPage = () => {
     }
   }
 
-  // Generate invoice number - OPRAVENO
+  // Generate invoice number
   const generateInvoiceNumber = async () => {
     try {
       const year = new Date().getFullYear()
@@ -157,7 +157,7 @@ const InvoicesPage = () => {
         if (error) throw error
         toast.success('Faktura byla aktualizována')
       } else {
-        // Create new invoice - OPRAVENO
+        // Create new invoice
         if (!data.invoice_number) {
           invoiceData.invoice_number = await generateInvoiceNumber()
         }
@@ -225,7 +225,7 @@ const InvoicesPage = () => {
     }
   }
 
-  // Handle add new - OPRAVENO
+  // Handle add new
   const handleAddNew = async () => {
     setEditingInvoice(null)
     const newInvoiceNumber = await generateInvoiceNumber()
@@ -372,7 +372,7 @@ const InvoicesPage = () => {
       )
     }
   ]
-return (
+  return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -758,38 +758,5 @@ return (
     </div>
   )
 }
-{/* Description */}
-          <div>
-            <Input
-              {...register('description')}
-              label="Popis služeb"
-              type="textarea"
-              rows={4}
-              placeholder="Detailní popis poskytnutých služeb, prací nebo dodávek..."
-              helpText="Tento text se zobrazí na faktuře"
-            />
-          </div>
 
-          {/* Company Information Display */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h4 className="font-medium text-gray-900 mb-3">Dodavatel (vaše údaje)</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <div className="font-medium">{import.meta.env.VITE_COMPANY_NAME}</div>
-                <div>{import.meta.env.VITE_COMPANY_ADDRESS}</div>
-                <div>{import.meta.env.VITE_COMPANY_CITY} {import.meta.env.VITE_COMPANY_POSTAL}</div>
-              </div>
-              <div>
-                <div>IČO: {import.meta.env.VITE_COMPANY_ICO}</div>
-                <div>DIČ: {import.meta.env.VITE_COMPANY_DIC}</div>
-                <div>Tel: {import.meta.env.VITE_COMPANY_PHONE}</div>
-                <div>Email: {import.meta.env.VITE_COMPANY_EMAIL}</div>
-              </div>
-            </div>
-          </div>
-    </form>
-      </Modal>
-    </div>
-  )
-}
 export default InvoicesPage
