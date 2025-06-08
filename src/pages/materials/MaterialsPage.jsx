@@ -1,26 +1,27 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
-import { Button, Table, Card, Input, Modal, ActionButton, CurrencyCell } from '../../components/ui'
-import { MATERIAL_CATEGORIES } from '../../utils/constants'
-import { formatCurrency } from '../../utils/helpers'
+import { Button, Card, Input, Table, Modal, StatCard } from '../../components/ui'
+import { formatCurrency, formatDate } from '../../utils/helpers'
 import { supabase } from '../../config/supabase'
 import toast from 'react-hot-toast'
 
 const MaterialsPage = () => {
   const [materials, setMaterials] = useState([])
+  const [suppliers, setSuppliers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
-  const [editingMaterial, setEditingMaterial] = useState(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [editingMaterial, setEditingMaterial] = useState(null)
   const [materialToDelete, setMaterialToDelete] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [filters, setFilters] = useState({
+    search: '',
     category: '',
-    search: ''
+    lowStock: false
   })
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm({
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm({
     defaultValues: {
       name: '',
       category: '',
@@ -33,6 +34,12 @@ const MaterialsPage = () => {
     }
   })
 
+  // Load data on mount
+  useEffect(() => {
+    loadMaterials()
+    loadSuppliers()
+  }, [])
+
   // Load materials from Supabase
   const loadMaterials = async () => {
     try {
@@ -40,7 +47,7 @@ const MaterialsPage = () => {
       const { data, error } = await supabase
         .from('materials')
         .select('*')
-        .order('name')
+        .order('created_at', { ascending: false })
 
       if (error) throw error
 
@@ -48,59 +55,29 @@ const MaterialsPage = () => {
     } catch (error) {
       console.error('Error loading materials:', error)
       toast.error('Chyba při načítání materiálů')
+      setMaterials([])
     } finally {
       setIsLoading(false)
     }
   }
 
-  useEffect(() => {
-    loadMaterials()
-  }, [])
+  // Load suppliers for dropdown
+  const loadSuppliers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('suppliers')
+        .select('id, name')
+        .order('name')
 
-  useEffect(() => {
-    if (editingMaterial) {
-      Object.keys(editingMaterial).forEach(key => {
-        setValue(key, editingMaterial[key] || '')
-      })
+      if (error) throw error
+      setSuppliers(data || [])
+    } catch (error) {
+      console.error('Error loading suppliers:', error)
+      // Don't show error for suppliers as it's not critical
     }
-  }, [editingMaterial, setValue])
-
-  const getFilteredMaterials = () => {
-    return materials.filter(material => {
-      // Category filter
-      if (filters.category && material.category !== filters.category) {
-        return false
-      }
-      
-      // Search filter
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase()
-        const searchFields = [
-          material.name,
-          material.supplier,
-          material.notes
-        ].filter(Boolean)
-        
-        const matchesSearch = searchFields.some(field => 
-          field.toLowerCase().includes(searchLower)
-        )
-        
-        if (!matchesSearch) return false
-      }
-      
-      return true
-    })
   }
 
-  const getMaterialStats = () => {
-    const total = materials.length
-    const lowStock = materials.filter(m => m.current_stock <= m.min_stock).length
-    const totalValue = materials.reduce((sum, m) => sum + (m.current_stock * m.price_per_unit), 0)
-    const categoriesCount = new Set(materials.map(m => m.category)).size
-
-    return { total, lowStock, totalValue, categoriesCount }
-  }
-
+  // Handle form submission
   const onSubmit = async (data) => {
     setSubmitting(true)
     try {
@@ -109,28 +86,30 @@ const MaterialsPage = () => {
         price_per_unit: parseFloat(data.price_per_unit) || 0,
         current_stock: parseInt(data.current_stock) || 0,
         min_stock: parseInt(data.min_stock) || 0,
+        updated_at: new Date().toISOString()
       }
 
-      let result
       if (editingMaterial) {
         // Update existing material
-        result = await supabase
+        const { error } = await supabase
           .from('materials')
           .update(materialData)
           .eq('id', editingMaterial.id)
-          .select()
+
+        if (error) throw error
+        toast.success('Materiál byl aktualizován')
       } else {
         // Create new material
-        result = await supabase
+        materialData.created_at = new Date().toISOString()
+
+        const { error } = await supabase
           .from('materials')
           .insert([materialData])
-          .select()
+
+        if (error) throw error
+        toast.success('Materiál byl přidán')
       }
 
-      if (result.error) throw result.error
-
-      toast.success(editingMaterial ? 'Materiál byl aktualizován' : 'Materiál byl přidán')
-      
       // Reload materials
       await loadMaterials()
       
@@ -141,22 +120,35 @@ const MaterialsPage = () => {
       
     } catch (error) {
       console.error('Error saving material:', error)
-      toast.error('Chyba při ukládání materiálu')
+      toast.error('Chyba při ukládání materiálu: ' + error.message)
     } finally {
       setSubmitting(false)
     }
   }
 
+  // Handle edit
   const handleEdit = (material) => {
     setEditingMaterial(material)
+    reset({
+      name: material.name || '',
+      category: material.category || '',
+      unit: material.unit || '',
+      price_per_unit: material.price_per_unit?.toString() || '',
+      current_stock: material.current_stock?.toString() || '',
+      min_stock: material.min_stock?.toString() || '',
+      supplier: material.supplier || '',
+      notes: material.notes || ''
+    })
     setShowAddModal(true)
   }
 
+  // Handle delete click
   const handleDeleteClick = (material) => {
     setMaterialToDelete(material)
     setShowDeleteModal(true)
   }
 
+  // Handle delete confirm
   const handleDelete = async () => {
     if (!materialToDelete) return
 
@@ -176,20 +168,82 @@ const MaterialsPage = () => {
       
     } catch (error) {
       console.error('Error deleting material:', error)
-      toast.error('Chyba při mazání materiálu')
+      toast.error('Chyba při mazání materiálu: ' + error.message)
     } finally {
       setDeleteLoading(false)
     }
   }
 
+  // Handle add new
   const handleAddNew = () => {
     setEditingMaterial(null)
-    reset()
+    reset({
+      name: '',
+      category: '',
+      unit: '',
+      price_per_unit: '',
+      current_stock: '',
+      min_stock: '',
+      supplier: '',
+      notes: ''
+    })
     setShowAddModal(true)
+  }
+
+  // Handle close modal
+  const handleCloseModal = () => {
+    setShowAddModal(false)
+    setEditingMaterial(null)
+    reset()
+  }
+
+  // Filter materials
+  const getFilteredMaterials = () => {
+    return materials.filter(material => {
+      const matchesSearch = !filters.search || 
+        material.name?.toLowerCase().includes(filters.search.toLowerCase()) ||
+        material.category?.toLowerCase().includes(filters.search.toLowerCase()) ||
+        material.supplier?.toLowerCase().includes(filters.search.toLowerCase())
+      
+      const matchesCategory = !filters.category || material.category === filters.category
+      
+      const matchesLowStock = !filters.lowStock || 
+        (material.current_stock <= material.min_stock)
+      
+      return matchesSearch && matchesCategory && matchesLowStock
+    })
+  }
+
+  // Calculate statistics
+  const getMaterialStats = () => {
+    const total = materials.length
+    const lowStock = materials.filter(m => m.current_stock <= m.min_stock).length
+    const outOfStock = materials.filter(m => m.current_stock === 0).length
+    const totalValue = materials.reduce((sum, m) => 
+      sum + (parseFloat(m.price_per_unit || 0) * parseInt(m.current_stock || 0)), 0
+    )
+    
+    // Get unique categories
+    const categories = [...new Set(materials.map(m => m.category).filter(Boolean))].length
+    
+    return { total, lowStock, outOfStock, totalValue, categories }
+  }
+
+  // Get unique categories for filter
+  const getCategories = () => {
+    const categories = [...new Set(materials.map(m => m.category).filter(Boolean))]
+    return categories.sort()
+  }
+
+  // Get unique units for dropdown
+  const getUnits = () => {
+    return ['ks', 'm', 'm²', 'm³', 'kg', 'l', 'balení', 'sada', 'role', 'pytel']
   }
 
   const filteredMaterials = getFilteredMaterials()
   const stats = getMaterialStats()
+  const categories = getCategories()
+  const units = getUnits()
 
   const columns = [
     {
@@ -208,33 +262,38 @@ const MaterialsPage = () => {
       render: (value, row) => (
         <div className="text-center">
           <span className={`font-semibold ${
-            value <= row.min_stock ? 'text-red-600' : 'text-gray-900'
+            value <= row.min_stock 
+              ? value === 0 
+                ? 'text-red-600' 
+                : 'text-yellow-600'
+              : 'text-green-600'
           }`}>
             {value} {row.unit}
           </span>
           {value <= row.min_stock && (
-            <div className="text-xs text-red-500">Nízký stav!</div>
+            <div className="text-xs text-red-500">
+              <i className="fas fa-exclamation-triangle mr-1" />
+              Nízký stav
+            </div>
           )}
         </div>
       )
     },
     {
+      key: 'min_stock',
+      title: 'Min. stav',
+      render: (value, row) => `${value} ${row.unit}`
+    },
+    {
       key: 'price_per_unit',
       title: 'Cena/jednotka',
-      render: (value, row) => (
-        <div className="text-right">
-          <CurrencyCell amount={value} />
-          <div className="text-xs text-gray-500">za {row.unit}</div>
-        </div>
-      )
+      render: (value, row) => `${formatCurrency(value)}/${row.unit}`
     },
     {
       key: 'total_value',
       title: 'Celková hodnota',
-      render: (_, row) => (
-        <div className="text-right">
-          <CurrencyCell amount={row.current_stock * row.price_per_unit} />
-        </div>
+      render: (_, row) => formatCurrency(
+        parseFloat(row.price_per_unit || 0) * parseInt(row.current_stock || 0)
       )
     },
     {
@@ -247,19 +306,23 @@ const MaterialsPage = () => {
       title: 'Akce',
       render: (_, row) => (
         <div className="flex items-center space-x-2">
-          <ActionButton
-            icon="fas fa-edit"
-            tooltip="Upravit"
+          <Button
+            size="sm"
+            variant="outline"
             onClick={() => handleEdit(row)}
-            variant="ghost"
-          />
-          <ActionButton
-            icon="fas fa-trash"
-            tooltip="Smazat"
+            icon="fas fa-edit"
+          >
+            Upravit
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
             onClick={() => handleDeleteClick(row)}
-            variant="ghost"
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-          />
+            icon="fas fa-trash"
+            className="text-red-600 hover:text-red-700"
+          >
+            Smazat
+          </Button>
         </div>
       )
     }
@@ -270,98 +333,123 @@ const MaterialsPage = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Materiál</h1>
-          <p className="text-gray-600 mt-1">Správa skladových zásob a materiálů</p>
+          <h1 className="text-2xl font-bold text-gray-900">Materiály</h1>
+          <p className="text-gray-600">Správa skladových zásob a materiálů</p>
         </div>
-        <Button onClick={handleAddNew} className="bg-primary-600 hover:bg-primary-700">
-          <i className="fas fa-plus mr-2" />
+        <Button
+          onClick={handleAddNew}
+          icon="fas fa-plus"
+        >
           Přidat materiál
         </Button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <div className="p-6">
-            <div className="flex items-center">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600">Celkem materiálů</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-              </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <i className="fas fa-boxes text-blue-600" />
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="p-6">
-            <div className="flex items-center">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600">Nízký stav</p>
-                <p className="text-2xl font-bold text-red-600">{stats.lowStock}</p>
-              </div>
-              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                <i className="fas fa-exclamation-triangle text-red-600" />
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="p-6">
-            <div className="flex items-center">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600">Celková hodnota</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.totalValue)}</p>
-              </div>
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <i className="fas fa-coins text-green-600" />
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="p-6">
-            <div className="flex items-center">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600">Kategorie</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.categoriesCount}</p>
-              </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <i className="fas fa-tags text-purple-600" />
-              </div>
-            </div>
-          </div>
-        </Card>
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <StatCard
+          title="Celkem materiálů"
+          value={stats.total}
+          icon="fas fa-boxes"
+          trend="neutral"
+        />
+        <StatCard
+          title="Nízký stav"
+          value={stats.lowStock}
+          icon="fas fa-exclamation-triangle"
+          trend={stats.lowStock > 0 ? "negative" : "positive"}
+        />
+        <StatCard
+          title="Vyprodáno"
+          value={stats.outOfStock}
+          icon="fas fa-times-circle"
+          trend={stats.outOfStock > 0 ? "negative" : "positive"}
+        />
+        <StatCard
+          title="Celková hodnota"
+          value={formatCurrency(stats.totalValue)}
+          icon="fas fa-euro-sign"
+          trend="positive"
+        />
+        <StatCard
+          title="Kategorií"
+          value={stats.categories}
+          icon="fas fa-tags"
+          trend="neutral"
+        />
       </div>
+
+      {/* Low Stock Alert */}
+      {stats.lowStock > 0 && (
+        <Card className="border-yellow-200 bg-yellow-50">
+          <div className="p-4">
+            <div className="flex items-center">
+              <i className="fas fa-exclamation-triangle text-yellow-500 mr-3" />
+              <div>
+                <h3 className="font-medium text-yellow-900">
+                  Upozornění na nízký stav materiálů
+                </h3>
+                <p className="text-sm text-yellow-700 mt-1">
+                  {stats.lowStock} materiálů má nízký stav skladu. 
+                  {stats.outOfStock > 0 && ` ${stats.outOfStock} materiálů je zcela vyprodáno.`}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto border-yellow-300 text-yellow-700 hover:bg-yellow-100"
+                onClick={() => setFilters(prev => ({ ...prev, lowStock: true }))}
+              >
+                Zobrazit
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Filters */}
       <Card>
+        <div className="p-6 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">Filtry</h2>
+        </div>
         <div className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Filtry</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Input
               placeholder="Hledat materiál..."
               value={filters.search}
               onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
               icon="fas fa-search"
             />
-            <select
+            
+            <Input
+              type="select"
               value={filters.category}
               onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               <option value="">Všechny kategorie</option>
-              {MATERIAL_CATEGORIES.map(category => (
-                <option key={category} value={category}>{category}</option>
+              {categories.map(category => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
               ))}
-            </select>
+            </Input>
+            
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="lowStock"
+                checked={filters.lowStock}
+                onChange={(e) => setFilters(prev => ({ ...prev, lowStock: e.target.checked }))}
+                className="form-checkbox"
+              />
+              <label htmlFor="lowStock" className="text-sm font-medium text-gray-700">
+                Pouze nízký stav
+              </label>
+            </div>
+            
             <Button
               variant="outline"
-              onClick={() => setFilters({ category: '', search: '' })}
+              onClick={() => setFilters({ search: '', category: '', lowStock: false })}
+              icon="fas fa-times"
             >
               Vymazat filtry
             </Button>
@@ -369,162 +457,310 @@ const MaterialsPage = () => {
         </div>
       </Card>
 
-      {/* Materials Table */}
-      <Card>
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">
-            Sklad materiálu ({filteredMaterials.length})
-          </h3>
-          <div className="flex space-x-2">
-            <Button variant="outline" size="sm">
-              <i className="fas fa-download mr-2" />
-              Export
-            </Button>
-            <Button variant="outline" size="sm">
-              <i className="fas fa-upload mr-2" />
-              Import
-            </Button>
-          </div>
-        </div>
-        <Table
-          data={filteredMaterials}
-          columns={columns}
-          loading={isLoading}
-          emptyMessage="Žádné materiály nenalezeny"
-        />
-      </Card>
+      {/* Empty state */}
+      {materials.length === 0 && !isLoading && (
+        <Card className="text-center py-12">
+          <i className="fas fa-boxes text-6xl text-gray-300 mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">Zatím žádné materiály</h3>
+          <p className="text-gray-600 mb-6">
+            Začněte přidáním prvního materiálu do skladu
+          </p>
+          <Button
+            onClick={handleAddNew}
+            icon="fas fa-plus"
+            size="lg"
+          >
+            Přidat první materiál
+          </Button>
+        </Card>
+      )}
 
-      {/* Add/Edit Modal */}
+      {/* Materials Table */}
+      {materials.length > 0 && (
+        <Card>
+          <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Materiály ({filteredMaterials.length})
+            </h2>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                icon="fas fa-download"
+                disabled
+              >
+                Export (brzy)
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                icon="fas fa-upload"
+                disabled
+              >
+                Import (brzy)
+              </Button>
+            </div>
+          </div>
+          
+          <Table
+            columns={columns}
+            data={filteredMaterials}
+            loading={isLoading}
+            emptyMessage="Žádné materiály nevyhovují filtrům"
+            emptyIcon="fas fa-filter"
+          />
+        </Card>
+      )}
+      {/* Add/Edit Material Modal */}
       <Modal
         isOpen={showAddModal}
-        onClose={() => {
-          setShowAddModal(false)
-          setEditingMaterial(null)
-          reset()
-        }}
+        onClose={handleCloseModal}
         title={editingMaterial ? 'Upravit materiál' : 'Nový materiál'}
-        size="lg"
-      >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Název materiálu *"
-              {...register('name', { required: 'Název je povinný' })}
-              error={errors.name?.message}
-            />
-            <select
-              {...register('category', { required: 'Kategorie je povinná' })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="">Vyberte kategorii</option>
-              {MATERIAL_CATEGORIES.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              label="Jednotka *"
-              {...register('unit', { required: 'Jednotka je povinná' })}
-              error={errors.unit?.message}
-              placeholder="kg, ks, m..."
-            />
-            <Input
-              label="Cena za jednotku"
-              type="number"
-              step="0.01"
-              {...register('price_per_unit')}
-              placeholder="0.00"
-            />
-            <Input
-              label="Současný stav"
-              type="number"
-              {...register('current_stock')}
-              placeholder="0"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Minimální stav"
-              type="number"
-              {...register('min_stock')}
-              placeholder="0"
-            />
-            <Input
-              label="Dodavatel"
-              {...register('supplier')}
-              placeholder="Název dodavatele"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Poznámky
-            </label>
-            <textarea
-              {...register('notes')}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-              placeholder="Dodatečné informace o materiálu..."
-            />
-          </div>
-
-          <div className="flex justify-end space-x-3 pt-4">
+        size="xl"
+        footer={
+          <>
             <Button
-              type="button"
               variant="outline"
-              onClick={() => {
-                setShowAddModal(false)
-                setEditingMaterial(null)
-                reset()
-              }}
+              onClick={handleCloseModal}
+              disabled={submitting}
             >
               Zrušit
             </Button>
             <Button
-              type="submit"
+              onClick={handleSubmit(onSubmit)}
               loading={submitting}
-              className="bg-primary-600 hover:bg-primary-700"
+              icon="fas fa-save"
             >
               {editingMaterial ? 'Uložit změny' : 'Přidat materiál'}
             </Button>
+          </>
+        }
+      >
+        <form className="space-y-6">
+          {/* Basic Information */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-gray-900">Základní údaje</h3>
+              
+              <Input
+                {...register('name', { required: 'Název materiálu je povinný' })}
+                label="Název materiálu"
+                error={errors.name?.message}
+                required
+                placeholder="Např. Cement Portland"
+              />
+              
+              <Input
+                {...register('category', { required: 'Kategorie je povinná' })}
+                label="Kategorie"
+                error={errors.category?.message}
+                required
+                placeholder="Např. Stavební materiály"
+                list="categories-list"
+              />
+              <datalist id="categories-list">
+                {categories.map(category => (
+                  <option key={category} value={category} />
+                ))}
+                <option value="Stavební materiály" />
+                <option value="Nářadí" />
+                <option value="Elektroinstalace" />
+                <option value="Vodoinstalace" />
+                <option value="Izolace" />
+                <option value="Dlažby a obklady" />
+                <option value="Barvy a laky" />
+                <option value="Dřevo" />
+                <option value="Kovy" />
+                <option value="Spojovací materiál" />
+              </datalist>
+              
+              <Input
+                {...register('unit', { required: 'Jednotka je povinná' })}
+                label="Jednotka"
+                type="select"
+                error={errors.unit?.message}
+                required
+              >
+                <option value="">Vyberte jednotku</option>
+                {units.map(unit => (
+                  <option key={unit} value={unit}>
+                    {unit}
+                  </option>
+                ))}
+              </Input>
+              
+              <Input
+                {...register('supplier')}
+                label="Dodavatel"
+                placeholder="Název dodavatele"
+                list="suppliers-list"
+              />
+              <datalist id="suppliers-list">
+                {suppliers.map(supplier => (
+                  <option key={supplier.id} value={supplier.name} />
+                ))}
+              </datalist>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-gray-900">Skladové údaje</h3>
+              
+              <Input
+                {...register('current_stock', { 
+                  required: 'Aktuální stav je povinný',
+                  min: { value: 0, message: 'Stav nemůže být záporný' }
+                })}
+                label="Aktuální stav"
+                type="number"
+                min="0"
+                error={errors.current_stock?.message}
+                required
+                placeholder="0"
+                suffix={watch('unit') || 'ks'}
+              />
+              
+              <Input
+                {...register('min_stock', { 
+                  required: 'Minimální stav je povinný',
+                  min: { value: 0, message: 'Minimální stav nemůže být záporný' }
+                })}
+                label="Minimální stav"
+                type="number"
+                min="0"
+                error={errors.min_stock?.message}
+                required
+                placeholder="0"
+                suffix={watch('unit') || 'ks'}
+                helpText="Při dosažení tohoto stavu bude zobrazeno upozornění"
+              />
+              
+              <Input
+                {...register('price_per_unit', { 
+                  required: 'Cena je povinná',
+                  min: { value: 0, message: 'Cena nemůže být záporná' }
+                })}
+                label="Cena za jednotku"
+                type="number"
+                step="0.01"
+                min="0"
+                error={errors.price_per_unit?.message}
+                required
+                placeholder="0.00"
+                suffix="Kč"
+              />
+
+              {/* Calculated total value */}
+              {watch('current_stock') && watch('price_per_unit') && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="text-sm">
+                    <div className="font-medium text-blue-900">Celková hodnota skladu</div>
+                    <div className="text-blue-700 text-lg font-semibold">
+                      {formatCurrency(
+                        (parseFloat(watch('current_stock')) || 0) * 
+                        (parseFloat(watch('price_per_unit')) || 0)
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Notes */}
+          <div>
+            <Input
+              {...register('notes')}
+              label="Poznámky"
+              type="textarea"
+              rows={3}
+              placeholder="Dodatečné informace o materiálu, specifikace, poznámky..."
+              helpText="Interní poznámky pro lepší identifikaci materiálu"
+            />
+          </div>
+
+          {/* Stock Status Preview */}
+          {watch('current_stock') && watch('min_stock') && (
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h4 className="font-medium text-gray-900 mb-3">Stav skladu</h4>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-gray-600">Aktuální stav</div>
+                  <div className="text-lg font-semibold">
+                    {watch('current_stock')} {watch('unit')}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-600">Minimální stav</div>
+                  <div className="text-lg font-semibold">
+                    {watch('min_stock')} {watch('unit')}
+                  </div>
+                </div>
+                <div className="text-right">
+                  {parseInt(watch('current_stock')) <= parseInt(watch('min_stock')) ? (
+                    <div className="flex items-center text-red-600">
+                      <i className="fas fa-exclamation-triangle mr-2" />
+                      <span className="font-medium">Nízký stav!</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center text-green-600">
+                      <i className="fas fa-check-circle mr-2" />
+                      <span className="font-medium">Dostatečný stav</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </form>
       </Modal>
 
-      {/* Delete Modal */}
+      {/* Delete Confirmation Modal */}
       <Modal
         isOpen={showDeleteModal}
-        onClose={() => {
-          setShowDeleteModal(false)
-          setMaterialToDelete(null)
-        }}
+        onClose={() => setShowDeleteModal(false)}
         title="Smazat materiál"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-gray-600">
-            Opravdu chcete smazat materiál "{materialToDelete?.name}"? Tato akce je nevratná.
-          </p>
-          <div className="flex justify-end space-x-3">
+        size="md"
+        footer={
+          <>
             <Button
               variant="outline"
-              onClick={() => {
-                setShowDeleteModal(false)
-                setMaterialToDelete(null)
-              }}
+              onClick={() => setShowDeleteModal(false)}
+              disabled={deleteLoading}
             >
               Zrušit
             </Button>
             <Button
               variant="danger"
-              loading={deleteLoading}
               onClick={handleDelete}
+              loading={deleteLoading}
+              icon="fas fa-trash"
             >
-              Smazat
+              Smazat materiál
             </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full">
+            <i className="fas fa-exclamation-triangle text-red-600 text-xl" />
+          </div>
+          
+          <div className="text-center">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              Opravdu smazat materiál?
+            </h3>
+            <p className="text-gray-600">
+              Chcete smazat materiál <strong>{materialToDelete?.name}</strong>?
+            </p>
+            {materialToDelete && materialToDelete.current_stock > 0 && (
+              <p className="text-sm text-yellow-600 mt-2">
+                <i className="fas fa-exclamation-triangle mr-1" />
+                Materiál má aktuální stav {materialToDelete.current_stock} {materialToDelete.unit}
+              </p>
+            )}
+            <p className="text-sm text-red-600 mt-2">
+              Tato akce je nevratná. Historie použití materiálu zůstane zachována.
+            </p>
           </div>
         </div>
       </Modal>
