@@ -1,9 +1,9 @@
-import { supabase } from '../supabase'
+import { supabase } from '../../config/supabase'
 import { handleApiError } from '../utils/errorHandler'
 
 /**
  * Materials API Service
- * Handles all material-related operations
+ * Handles all material-related operations including inventory management
  */
 export const materialsApi = {
   // Get all materials with optional filters
@@ -11,28 +11,21 @@ export const materialsApi = {
     try {
       let query = supabase
         .from('materials')
-        .select(`
-          *,
-          supplier:suppliers(name),
-          project:projects(name)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
 
       // Apply filters
       if (filters.category) {
         query = query.eq('category', filters.category)
       }
-      if (filters.project_id) {
-        query = query.eq('project_id', filters.project_id)
-      }
-      if (filters.supplier_id) {
-        query = query.eq('supplier_id', filters.supplier_id)
-      }
-      if (filters.status) {
-        query = query.eq('status', filters.status)
+      if (filters.supplier) {
+        query = query.ilike('supplier', `%${filters.supplier}%`)
       }
       if (filters.search) {
-        query = query.ilike('name', `%${filters.search}%`)
+        query = query.or(`name.ilike.%${filters.search}%,category.ilike.%${filters.search}%`)
+      }
+      if (filters.lowStock) {
+        query = query.lt('current_stock', supabase.raw('min_stock'))
       }
 
       const { data, error } = await query
@@ -49,15 +42,7 @@ export const materialsApi = {
     try {
       const { data, error } = await supabase
         .from('materials')
-        .select(`
-          *,
-          supplier:suppliers(*),
-          project:projects(*),
-          material_transactions(
-            *,
-            user:profiles(first_name, last_name)
-          )
-        `)
+        .select('*')
         .eq('id', id)
         .single()
 
@@ -75,6 +60,8 @@ export const materialsApi = {
         .from('materials')
         .insert([{
           ...materialData,
+          current_stock: materialData.current_stock || 0,
+          min_stock: materialData.min_stock || 0,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }])
@@ -82,10 +69,6 @@ export const materialsApi = {
         .single()
 
       if (error) throw error
-
-      // Log material creation
-      await this.logTransaction(data.id, 'created', data.quantity, 'Material created')
-
       return { data, error: null }
     } catch (error) {
       return handleApiError(error, 'Failed to create material')
@@ -115,33 +98,62 @@ export const materialsApi = {
   // Delete material
   async delete(id) {
     try {
+      // Check if material is used in any project
+      const { data: usage, error: usageError } = await supabase
+        .from('material_usage')
+        .select('id')
+        .eq('material_id', id)
+        .limit(1)
+
+      if (usageError && !usageError.message.includes('does not exist')) {
+        throw usageError
+      }
+
+      if (usage && usage.length > 0) {
+        return { 
+          data: null, 
+          error: 'Nelze smazat materiál který je používán v projektech' 
+        }
+      }
+
       const { error } = await supabase
         .from('materials')
         .delete()
         .eq('id', id)
 
       if (error) throw error
-      return { data: null, error: null }
+      return { data: true, error: null }
     } catch (error) {
       return handleApiError(error, 'Failed to delete material')
     }
   },
 
-  // Update material quantity
-  async updateQuantity(id, newQuantity, reason = '') {
+  // Update stock (add or remove)
+  async updateStock(id, quantity, operation = 'add', note = '') {
     try {
       // Get current material
-      const { data: material } = await this.getById(id)
-      if (!material) throw new Error('Material not found')
+      const { data: material, error: fetchError } = await supabase
+        .from('materials')
+        .select('current_stock, name')
+        .eq('id', id)
+        .single()
 
-      const oldQuantity = material.quantity
-      const difference = newQuantity - oldQuantity
+      if (fetchError) throw fetchError
 
-      // Update quantity
+      let newStock
+      if (operation === 'add') {
+        newStock = material.current_stock + quantity
+      } else if (operation === 'remove') {
+        newStock = Math.max(0, material.current_stock - quantity)
+      } else {
+        newStock = quantity // set absolute value
+      }
+
+      // Update stock
       const { data, error } = await supabase
         .from('materials')
         .update({
-          quantity: newQuantity,
+          current_stock: newStock,
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
@@ -150,100 +162,9 @@ export const materialsApi = {
 
       if (error) throw error
 
-      // Log transaction
-      const transactionType = difference > 0 ? 'added' : 'removed'
-      await this.logTransaction(
-        id, 
-        transactionType, 
-        Math.abs(difference), 
-        reason || `Quantity ${transactionType}`
-      )
-
       return { data, error: null }
     } catch (error) {
-      return handleApiError(error, 'Failed to update material quantity')
-    }
-  },
-
-  // Log material transaction
-  async logTransaction(materialId, type, quantity, description = '') {
-    try {
-      const { data: user } = await supabase.auth.getUser()
-      
-      const { data, error } = await supabase
-        .from('material_transactions')
-        .insert([{
-          material_id: materialId,
-          type,
-          quantity,
-          description,
-          user_id: user?.user?.id,
-          created_at: new Date().toISOString()
-        }])
-        .select()
-        .single()
-
-      if (error) throw error
-      return { data, error: null }
-    } catch (error) {
-      return handleApiError(error, 'Failed to log material transaction')
-    }
-  },
-
-  // Get material transactions
-  async getTransactions(materialId) {
-    try {
-      const { data, error } = await supabase
-        .from('material_transactions')
-        .select(`
-          *,
-          user:profiles(first_name, last_name)
-        `)
-        .eq('material_id', materialId)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      return { data, error: null }
-    } catch (error) {
-      return handleApiError(error, 'Failed to fetch material transactions')
-    }
-  },
-
-  // Get materials by project
-  async getByProject(projectId) {
-    try {
-      const { data, error } = await supabase
-        .from('materials')
-        .select(`
-          *,
-          supplier:suppliers(name)
-        `)
-        .eq('project_id', projectId)
-        .order('name')
-
-      if (error) throw error
-      return { data, error: null }
-    } catch (error) {
-      return handleApiError(error, 'Failed to fetch project materials')
-    }
-  },
-
-  // Get materials by supplier
-  async getBySupplier(supplierId) {
-    try {
-      const { data, error } = await supabase
-        .from('materials')
-        .select(`
-          *,
-          project:projects(name)
-        `)
-        .eq('supplier_id', supplierId)
-        .order('name')
-
-      if (error) throw error
-      return { data, error: null }
-    } catch (error) {
-      return handleApiError(error, 'Failed to fetch supplier materials')
+      return handleApiError(error, 'Failed to update stock')
     }
   },
 
@@ -252,18 +173,130 @@ export const materialsApi = {
     try {
       const { data, error } = await supabase
         .from('materials')
-        .select(`
-          *,
-          supplier:suppliers(name),
-          project:projects(name)
-        `)
-        .lt('quantity', supabase.raw('min_quantity'))
-        .order('quantity')
+        .select('*')
+        .lt('current_stock', supabase.raw('min_stock'))
+        .order('current_stock', { ascending: true })
 
       if (error) throw error
       return { data, error: null }
     } catch (error) {
       return handleApiError(error, 'Failed to fetch low stock materials')
+    }
+  },
+
+  // Get material categories
+  async getCategories() {
+    try {
+      const { data, error } = await supabase
+        .from('materials')
+        .select('category')
+        .not('category', 'is', null)
+
+      if (error) throw error
+
+      // Get unique categories
+      const categories = [...new Set(data.map(material => material.category))].filter(Boolean)
+      
+      return { data: categories, error: null }
+    } catch (error) {
+      return handleApiError(error, 'Failed to fetch categories')
+    }
+  },
+
+  // Get suppliers
+  async getSuppliers() {
+    try {
+      const { data, error } = await supabase
+        .from('materials')
+        .select('supplier')
+        .not('supplier', 'is', null)
+
+      if (error) throw error
+
+      // Get unique suppliers
+      const suppliers = [...new Set(data.map(material => material.supplier))].filter(Boolean)
+      
+      return { data: suppliers, error: null }
+    } catch (error) {
+      return handleApiError(error, 'Failed to fetch suppliers')
+    }
+  },
+
+  // Search materials
+  async search(searchTerm, filters = {}) {
+    try {
+      let query = supabase
+        .from('materials')
+        .select('*')
+
+      // Apply search
+      if (searchTerm) {
+        query = query.or(`name.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%,supplier.ilike.%${searchTerm}%`)
+      }
+
+      // Apply additional filters
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          if (key === 'lowStock' && value) {
+            query = query.lt('current_stock', supabase.raw('min_stock'))
+          } else {
+            query = query.eq(key, value)
+          }
+        }
+      })
+
+      query = query.order('created_at', { ascending: false })
+
+      const { data, error } = await query
+
+      if (error) throw error
+      return { data, error: null }
+    } catch (error) {
+      return handleApiError(error, 'Failed to search materials')
+    }
+  },
+
+  // Get material usage history
+  async getUsageHistory(id) {
+    try {
+      const { data, error } = await supabase
+        .from('material_usage')
+        .select(`
+          *,
+          project:projects(name)
+        `)
+        .eq('material_id', id)
+        .order('created_at', { ascending: false })
+
+      if (error && !error.message.includes('does not exist')) {
+        throw error
+      }
+
+      return { data: data || [], error: null }
+    } catch (error) {
+      return handleApiError(error, 'Failed to fetch material usage history')
+    }
+  },
+
+  // Get materials for project
+  async getByProject(projectId) {
+    try {
+      const { data, error } = await supabase
+        .from('material_usage')
+        .select(`
+          *,
+          material:materials(*)
+        `)
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false })
+
+      if (error && !error.message.includes('does not exist')) {
+        throw error
+      }
+
+      return { data: data || [], error: null }
+    } catch (error) {
+      return handleApiError(error, 'Failed to fetch project materials')
     }
   }
 }
