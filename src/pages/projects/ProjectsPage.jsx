@@ -44,13 +44,16 @@ const ProjectsPage = () => {
     }
   })
 
+  // Watch form values safely
+  const formValues = watch()
+
   // Load data on mount
   useEffect(() => {
     loadProjects()
     loadDropdownData()
   }, [])
 
-  // Load projects from Supabase
+  // Load projects from Supabase - OPRAVENO
   const loadProjects = async () => {
     try {
       setIsLoading(true)
@@ -59,7 +62,7 @@ const ProjectsPage = () => {
         .select(`
           *,
           client:clients(name),
-          manager:profiles(first_name, last_name)
+          manager:profiles!projects_manager_id_fkey(first_name, last_name)
         `)
         .order('created_at', { ascending: false })
 
@@ -279,13 +282,10 @@ const ProjectsPage = () => {
 
   // Set end date automatically when start date changes
   const handleStartDateChange = (startDate) => {
-    if (startDate && !watch('end_date')) {
+    if (startDate && !formValues.end_date) {
       const endDate = new Date(startDate)
       endDate.setMonth(endDate.getMonth() + 3) // Default 3 months duration
-      reset({
-        ...watch(),
-        end_date: endDate.toISOString().split('T')[0]
-      })
+      setValue('end_date', endDate.toISOString().split('T')[0])
     }
   }
 
@@ -775,14 +775,14 @@ const ProjectsPage = () => {
               />
             </div>
             
-            {watch('start_date') && watch('end_date') && (
+            {formValues.start_date && formValues.end_date && (
               <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="text-sm">
                   <div className="font-medium text-blue-900">Délka projektu</div>
                   <div className="text-blue-700">
                     {(() => {
-                      const start = new Date(watch('start_date'))
-                      const end = new Date(watch('end_date'))
+                      const start = new Date(formValues.start_date)
+                      const end = new Date(formValues.end_date)
                       const diffTime = Math.abs(end - start)
                       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
                       const months = Math.floor(diffDays / 30)
@@ -822,9 +822,9 @@ const ProjectsPage = () => {
               <div className="text-sm">
                 <div className="font-medium text-gray-900">Aktuální manažer:</div>
                 <div className="text-gray-700">
-                  {watch('manager_id') ? 
-                    managers.find(m => m.id === watch('manager_id'))?.first_name + ' ' +
-                    managers.find(m => m.id === watch('manager_id'))?.last_name 
+                  {formValues.manager_id ? 
+                    managers.find(m => m.id === formValues.manager_id)?.first_name + ' ' +
+                    managers.find(m => m.id === formValues.manager_id)?.last_name 
                     : 'Není vybrán'
                   }
                 </div>
@@ -833,31 +833,31 @@ const ProjectsPage = () => {
           </div>
 
           {/* Project Summary */}
-          {(watch('name') || watch('budget') || watch('start_date')) && (
+          {(formValues.name || formValues.budget || formValues.start_date) && (
             <div className="bg-gray-50 rounded-lg p-4">
               <h4 className="font-medium text-gray-900 mb-3">Přehled projektu</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
                   <div className="font-medium">Projekt:</div>
-                  <div className="text-gray-700">{watch('name') || 'Nepojmenovaný projekt'}</div>
-                  {watch('location') && (
+                  <div className="text-gray-700">{formValues.name || 'Nepojmenovaný projekt'}</div>
+                  {formValues.location && (
                     <>
                       <div className="font-medium mt-2">Lokalita:</div>
-                      <div className="text-gray-700">{watch('location')}</div>
+                      <div className="text-gray-700">{formValues.location}</div>
                     </>
                   )}
                 </div>
                 <div>
-                  {watch('budget') && (
+                  {formValues.budget && (
                     <>
                       <div className="font-medium">Rozpočet:</div>
-                      <div className="text-gray-700">{formatCurrency(watch('budget'))}</div>
+                      <div className="text-gray-700">{formatCurrency(formValues.budget)}</div>
                     </>
                   )}
-                  {watch('start_date') && (
+                  {formValues.start_date && (
                     <>
                       <div className="font-medium mt-2">Začátek:</div>
-                      <div className="text-gray-700">{formatDate(watch('start_date'))}</div>
+                      <div className="text-gray-700">{formatDate(formValues.start_date)}</div>
                     </>
                   )}
                 </div>
