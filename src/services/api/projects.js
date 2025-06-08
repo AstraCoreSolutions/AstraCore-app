@@ -2,19 +2,14 @@ import { supabase, TABLES } from '../../config/supabase.js'
 import { debugLog, debugError } from '../../utils/helpers.js'
 
 export const projectsAPI = {
-  // Get all projects - OPRAVENO
+  // Get all projects - BEZ JOINŮ
   getProjects: async (userId, userRole) => {
     try {
       debugLog('Fetching projects for user:', userId, 'role:', userRole)
       
       let query = supabase
         .from(TABLES.PROJECTS)
-        .select(`
-          *,
-          client:clients(id, name, email),
-          manager:manager_id(id, first_name, last_name),
-          creator:created_by(id, first_name, last_name)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
       
       // Filter based on user role
@@ -22,12 +17,45 @@ export const projectsAPI = {
         query = query.contains('assigned_employees', [userId])
       }
       
-      const { data, error } = await query
+      const { data: projects, error } = await query
       
       if (error) throw error
       
-      debugLog('Projects fetched:', data?.length || 0)
-      return { success: true, projects: data || [] }
+      // Separately load related data
+      const projectsWithRelations = await Promise.all(
+        (projects || []).map(async (project) => {
+          // Load client
+          let client = null
+          if (project.client_id) {
+            const { data: clientData } = await supabase
+              .from('clients')
+              .select('id, name, email')
+              .eq('id', project.client_id)
+              .single()
+            client = clientData
+          }
+          
+          // Load manager
+          let manager = null
+          if (project.manager_id) {
+            const { data: managerData } = await supabase
+              .from('profiles')
+              .select('id, first_name, last_name')
+              .eq('id', project.manager_id)
+              .single()
+            manager = managerData
+          }
+          
+          return {
+            ...project,
+            client,
+            manager
+          }
+        })
+      )
+      
+      debugLog('Projects fetched:', projectsWithRelations?.length || 0)
+      return { success: true, projects: projectsWithRelations }
       
     } catch (error) {
       debugError('Failed to fetch projects:', error)
@@ -35,26 +63,48 @@ export const projectsAPI = {
     }
   },
 
-  // Get single project - OPRAVENO
+  // Get single project - BEZ JOINŮ
   getProject: async (projectId) => {
     try {
       debugLog('Fetching project:', projectId)
       
-      const { data, error } = await supabase
+      const { data: project, error } = await supabase
         .from(TABLES.PROJECTS)
-        .select(`
-          *,
-          client:clients(id, name, email, phone, address),
-          manager:manager_id(id, first_name, last_name, email, phone),
-          creator:created_by(id, first_name, last_name, email)
-        `)
+        .select('*')
         .eq('id', projectId)
         .single()
       
       if (error) throw error
       
-      debugLog('Project fetched:', data)
-      return { success: true, project: data }
+      // Load related data separately
+      let client = null
+      if (project.client_id) {
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('id, name, email, phone, address')
+          .eq('id', project.client_id)
+          .single()
+        client = clientData
+      }
+      
+      let manager = null
+      if (project.manager_id) {
+        const { data: managerData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, email, phone')
+          .eq('id', project.manager_id)
+          .single()
+        manager = managerData
+      }
+      
+      const projectWithRelations = {
+        ...project,
+        client,
+        manager
+      }
+      
+      debugLog('Project fetched:', projectWithRelations)
+      return { success: true, project: projectWithRelations }
       
     } catch (error) {
       debugError('Failed to fetch project:', error)
@@ -62,7 +112,7 @@ export const projectsAPI = {
     }
   },
 
-  // Create project - OPRAVENO
+  // Create project - BEZ JOINŮ
   createProject: async (projectData, creatorId) => {
     try {
       debugLog('Creating project:', projectData)
@@ -74,21 +124,43 @@ export const projectsAPI = {
         updated_at: new Date().toISOString()
       }
       
-      const { data, error } = await supabase
+      const { data: project, error } = await supabase
         .from(TABLES.PROJECTS)
         .insert([newProject])
-        .select(`
-          *,
-          client:clients(id, name, email),
-          manager:manager_id(id, first_name, last_name),
-          creator:created_by(id, first_name, last_name)
-        `)
+        .select('*')
         .single()
       
       if (error) throw error
       
-      debugLog('Project created:', data)
-      return { success: true, project: data }
+      // Load related data
+      let client = null
+      if (project.client_id) {
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('id, name, email')
+          .eq('id', project.client_id)
+          .single()
+        client = clientData
+      }
+      
+      let manager = null
+      if (project.manager_id) {
+        const { data: managerData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .eq('id', project.manager_id)
+          .single()
+        manager = managerData
+      }
+      
+      const projectWithRelations = {
+        ...project,
+        client,
+        manager
+      }
+      
+      debugLog('Project created:', projectWithRelations)
+      return { success: true, project: projectWithRelations }
       
     } catch (error) {
       debugError('Failed to create project:', error)
@@ -96,7 +168,7 @@ export const projectsAPI = {
     }
   },
 
-  // Update project - OPRAVENO
+  // Update project - BEZ JOINŮ
   updateProject: async (projectId, updates) => {
     try {
       debugLog('Updating project:', projectId, updates)
@@ -106,22 +178,44 @@ export const projectsAPI = {
         updated_at: new Date().toISOString()
       }
       
-      const { data, error } = await supabase
+      const { data: project, error } = await supabase
         .from(TABLES.PROJECTS)
         .update(updateData)
         .eq('id', projectId)
-        .select(`
-          *,
-          client:clients(id, name, email),
-          manager:manager_id(id, first_name, last_name),
-          creator:created_by(id, first_name, last_name)
-        `)
+        .select('*')
         .single()
       
       if (error) throw error
       
-      debugLog('Project updated:', data)
-      return { success: true, project: data }
+      // Load related data
+      let client = null
+      if (project.client_id) {
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('id, name, email')
+          .eq('id', project.client_id)
+          .single()
+        client = clientData
+      }
+      
+      let manager = null
+      if (project.manager_id) {
+        const { data: managerData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .eq('id', project.manager_id)
+          .single()
+        manager = managerData
+      }
+      
+      const projectWithRelations = {
+        ...project,
+        client,
+        manager
+      }
+      
+      debugLog('Project updated:', projectWithRelations)
+      return { success: true, project: projectWithRelations }
       
     } catch (error) {
       debugError('Failed to update project:', error)
@@ -150,24 +244,41 @@ export const projectsAPI = {
     }
   },
 
-  // Get project diary entries
+  // Get project diary entries - BEZ JOINŮ
   getProjectDiary: async (projectId) => {
     try {
       debugLog('Fetching project diary for project:', projectId)
       
-      const { data, error } = await supabase
+      const { data: entries, error } = await supabase
         .from(TABLES.PROJECT_DIARY)
-        .select(`
-          *,
-          author:author_id(id, first_name, last_name)
-        `)
+        .select('*')
         .eq('project_id', projectId)
         .order('entry_date', { ascending: false })
       
       if (error) throw error
       
-      debugLog('Project diary entries fetched:', data?.length || 0)
-      return { success: true, entries: data || [] }
+      // Load authors separately
+      const entriesWithAuthors = await Promise.all(
+        (entries || []).map(async (entry) => {
+          let author = null
+          if (entry.author_id) {
+            const { data: authorData } = await supabase
+              .from('profiles')
+              .select('id, first_name, last_name')
+              .eq('id', entry.author_id)
+              .single()
+            author = authorData
+          }
+          
+          return {
+            ...entry,
+            author
+          }
+        })
+      )
+      
+      debugLog('Project diary entries fetched:', entriesWithAuthors?.length || 0)
+      return { success: true, entries: entriesWithAuthors }
       
     } catch (error) {
       debugError('Failed to fetch project diary:', error)
@@ -175,7 +286,7 @@ export const projectsAPI = {
     }
   },
 
-  // Create diary entry
+  // Create diary entry - BEZ JOINŮ
   createDiaryEntry: async (entryData, authorId) => {
     try {
       debugLog('Creating diary entry:', entryData)
@@ -187,19 +298,32 @@ export const projectsAPI = {
         updated_at: new Date().toISOString()
       }
       
-      const { data, error } = await supabase
+      const { data: entry, error } = await supabase
         .from(TABLES.PROJECT_DIARY)
         .insert([newEntry])
-        .select(`
-          *,
-          author:author_id(id, first_name, last_name)
-        `)
+        .select('*')
         .single()
       
       if (error) throw error
       
-      debugLog('Diary entry created:', data)
-      return { success: true, entry: data }
+      // Load author separately
+      let author = null
+      if (entry.author_id) {
+        const { data: authorData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .eq('id', entry.author_id)
+          .single()
+        author = authorData
+      }
+      
+      const entryWithAuthor = {
+        ...entry,
+        author
+      }
+      
+      debugLog('Diary entry created:', entryWithAuthor)
+      return { success: true, entry: entryWithAuthor }
       
     } catch (error) {
       debugError('Failed to create diary entry:', error)
@@ -217,20 +341,33 @@ export const projectsAPI = {
         updated_at: new Date().toISOString()
       }
       
-      const { data, error } = await supabase
+      const { data: entry, error } = await supabase
         .from(TABLES.PROJECT_DIARY)
         .update(updateData)
         .eq('id', entryId)
-        .select(`
-          *,
-          author:author_id(id, first_name, last_name)
-        `)
+        .select('*')
         .single()
       
       if (error) throw error
       
-      debugLog('Diary entry updated:', data)
-      return { success: true, entry: data }
+      // Load author separately
+      let author = null
+      if (entry.author_id) {
+        const { data: authorData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .eq('id', entry.author_id)
+          .single()
+        author = authorData
+      }
+      
+      const entryWithAuthor = {
+        ...entry,
+        author
+      }
+      
+      debugLog('Diary entry updated:', entryWithAuthor)
+      return { success: true, entry: entryWithAuthor }
       
     } catch (error) {
       debugError('Failed to update diary entry:', error)
