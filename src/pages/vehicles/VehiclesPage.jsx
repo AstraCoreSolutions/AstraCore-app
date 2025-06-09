@@ -1,435 +1,159 @@
 import React, { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { Button, Table, Card, Input, Modal, StatusBadge, ActionButton, CurrencyCell, DateCell } from '../../components/ui'
-import { VEHICLE_STATUS, STATUS_LABELS, STATUS_COLORS } from '../../utils/constants'
+import { useNavigate } from 'react-router-dom'
+import useVehiclesStore from '../../store/vehiclesStore'
+import useAuthStore from '../../store/authStore'
+import { Button, Card, StatusBadge, Modal, Spinner } from '../../components/ui'
+import { usePermissions } from '../../components/common/ProtectedRoute'
 import { formatCurrency, formatDate } from '../../utils/helpers'
-import { supabase } from '../../config/supabase'
-import toast from 'react-hot-toast'
+import { VEHICLE_STATUS, STATUS_LABELS, STATUS_COLORS } from '../../utils/constants'
 
 const VehiclesPage = () => {
-  const [vehicles, setVehicles] = useState([])
-  const [employees, setEmployees] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [editingVehicle, setEditingVehicle] = useState(null)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [vehicleToDelete, setVehicleToDelete] = useState(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [deleteLoading, setDeleteLoading] = useState(false)
-  const [filters, setFilters] = useState({
-    type: '',
-    status: '',
-    search: ''
-  })
+  const navigate = useNavigate()
+  const { profile } = useAuthStore()
+  const { 
+    vehicles, 
+    isLoading, 
+    filters, 
+    types,
+    brands,
+    expiringDocuments,
+    setFilters, 
+    clearFilters, 
+    loadVehicles, 
+    loadTypes,
+    loadBrands,
+    loadExpiringDocuments,
+    deleteVehicle,
+    assignVehicle,
+    unassignVehicle,
+    sendToService,
+    returnFromService,
+    getVehiclesOverview 
+  } = useVehiclesStore()
+  const { hasPermission } = usePermissions()
+  
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showAssignModal, setShowAssignModal] = useState(false)
+  const [selectedVehicle, setSelectedVehicle] = useState(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm({
-    defaultValues: {
-      name: '',
-      type: '',
-      brand: '',
-      model: '',
-      year: new Date().getFullYear(),
-      license_plate: '',
-      vin: '',
-      fuel_type: 'diesel',
-      status: VEHICLE_STATUS.ACTIVE,
-      purchase_date: '',
-      purchase_price: '',
-      current_value: '',
-      insurance_expiry: '',
-      stk_expiry: '',
-      assigned_to: '',
-      notes: ''
-    }
-  })
-
-  const vehicleTypes = [
-    { value: 'car', label: 'Osobní auto' },
-    { value: 'van', label: 'Dodávka' },
-    { value: 'truck', label: 'Nákladní auto' },
-    { value: 'trailer', label: 'Přívěs' },
-    { value: 'machinery', label: 'Stavební stroj' },
-    { value: 'other', label: 'Ostatní' }
-  ]
-
-  const fuelTypes = [
-    { value: 'petrol', label: 'Benzín' },
-    { value: 'diesel', label: 'Nafta' },
-    { value: 'electric', label: 'Elektřina' },
-    { value: 'hybrid', label: 'Hybrid' },
-    { value: 'lpg', label: 'LPG' },
-    { value: 'other', label: 'Ostatní' }
-  ]
-
-  // Load vehicles from Supabase
-  const loadVehicles = async () => {
-    try {
-      setIsLoading(true)
-      const { data, error } = await supabase
-        .from('vehicles')
-        .select(`
-          *,
-          assigned_user:profiles!vehicles_assigned_to_fkey(first_name, last_name)
-        `)
-        .order('name')
-
-      if (error) throw error
-
-      const vehiclesWithDetails = data?.map(vehicle => ({
-        ...vehicle,
-        assigned_to_name: vehicle.assigned_user 
-          ? `${vehicle.assigned_user.first_name} ${vehicle.assigned_user.last_name}`.trim()
-          : null
-      })) || []
-
-      setVehicles(vehiclesWithDetails)
-    } catch (error) {
-      console.error('Error loading vehicles:', error)
-      toast.error('Chyba při načítání vozového parku')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Load employees for assignment dropdown
-  const loadEmployees = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, first_name, last_name')
-        .order('first_name')
-
-      if (error) throw error
-      setEmployees(data || [])
-    } catch (error) {
-      console.error('Error loading employees:', error)
-    }
-  }
-
+  // Load data on mount
   useEffect(() => {
     loadVehicles()
-    loadEmployees()
-  }, [])
+    loadTypes()
+    loadBrands()
+    loadExpiringDocuments()
+  }, [loadVehicles, loadTypes, loadBrands, loadExpiringDocuments])
 
-  useEffect(() => {
-    if (editingVehicle) {
-      Object.keys(editingVehicle).forEach(key => {
-        if (key.includes('_date') || key.includes('_expiry')) {
-          setValue(key, editingVehicle[key]?.split('T')[0])
-        } else {
-          setValue(key, editingVehicle[key] || '')
-        }
-      })
+  const overview = getVehiclesOverview()
+
+  const handleCreateVehicle = () => {
+    setSelectedVehicle(null)
+    setShowCreateModal(true)
+  }
+
+  const handleEditVehicle = (vehicle) => {
+    setSelectedVehicle(vehicle)
+    setShowEditModal(true)
+  }
+
+  const handleAssignVehicle = (vehicle) => {
+    setSelectedVehicle(vehicle)
+    setShowAssignModal(true)
+  }
+
+  const handleUnassignVehicle = async (vehicle) => {
+    const result = await unassignVehicle(vehicle.id)
+    if (result.success) {
+      loadVehicles(true)
     }
-  }, [editingVehicle, setValue])
-
-  const getFilteredVehicles = () => {
-    return vehicles.filter(vehicle => {
-      // Type filter
-      if (filters.type && vehicle.type !== filters.type) {
-        return false
-      }
-      
-      // Status filter
-      if (filters.status && vehicle.status !== filters.status) {
-        return false
-      }
-      
-      // Search filter
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase()
-        const searchFields = [
-          vehicle.name,
-          vehicle.brand,
-          vehicle.model,
-          vehicle.license_plate,
-          vehicle.assigned_to_name
-        ].filter(Boolean)
-        
-        const matchesSearch = searchFields.some(field => 
-          field.toLowerCase().includes(searchLower)
-        )
-        
-        if (!matchesSearch) return false
-      }
-      
-      return true
-    })
   }
 
-  const getVehicleStats = () => {
-    const total = vehicles.length
-    const active = vehicles.filter(v => v.status === VEHICLE_STATUS.ACTIVE).length
-    const inService = vehicles.filter(v => v.status === VEHICLE_STATUS.SERVICE).length
-    const totalValue = vehicles.reduce((sum, v) => sum + (v.current_value || 0), 0)
-    const monthlyCosts = vehicles.reduce((sum, v) => sum + (v.monthly_costs || 0), 0)
-
-    return { total, active, inService, totalValue, monthlyCosts }
+  const handleSendToService = async (vehicle) => {
+    const result = await sendToService(vehicle.id, 'Odesláno do servisu')
+    if (result.success) {
+      loadVehicles(true)
+    }
   }
 
-  const getExpiringDocuments = () => {
-    const now = new Date()
-    const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+  const handleReturnFromService = async (vehicle) => {
+    const result = await returnFromService(vehicle.id, 'Vráceno ze servisu')
+    if (result.success) {
+      loadVehicles(true)
+    }
+  }
+
+  const handleDeleteVehicle = async () => {
+    if (!selectedVehicle) return
     
-    return vehicles.filter(vehicle => {
-      const insuranceExpiry = vehicle.insurance_expiry ? new Date(vehicle.insurance_expiry) : null
-      const stkExpiry = vehicle.stk_expiry ? new Date(vehicle.stk_expiry) : null
-      
-      return (insuranceExpiry && insuranceExpiry <= thirtyDaysFromNow) ||
-             (stkExpiry && stkExpiry <= thirtyDaysFromNow)
-    })
-  }
-
-  const onSubmit = async (data) => {
-    setSubmitting(true)
-    try {
-      const vehicleData = {
-        ...data,
-        year: parseInt(data.year) || new Date().getFullYear(),
-        purchase_price: parseFloat(data.purchase_price) || 0,
-        current_value: parseFloat(data.current_value) || 0,
-        assigned_to: data.assigned_to || null,
-        purchase_date: data.purchase_date || null,
-        insurance_expiry: data.insurance_expiry || null,
-        stk_expiry: data.stk_expiry || null
-      }
-
-      let result
-      if (editingVehicle) {
-        // Update existing vehicle
-        result = await supabase
-          .from('vehicles')
-          .update(vehicleData)
-          .eq('id', editingVehicle.id)
-          .select()
-      } else {
-        // Create new vehicle
-        result = await supabase
-          .from('vehicles')
-          .insert([vehicleData])
-          .select()
-      }
-
-      if (result.error) throw result.error
-
-      toast.success(editingVehicle ? 'Vozidlo bylo aktualizováno' : 'Vozidlo bylo přidáno')
-      
-      // Reload vehicles
-      await loadVehicles()
-      
-      // Reset form and close modal
-      reset()
-      setShowAddModal(false)
-      setEditingVehicle(null)
-      
-    } catch (error) {
-      console.error('Error saving vehicle:', error)
-      toast.error('Chyba při ukládání vozidla')
-    } finally {
-      setSubmitting(false)
+    const result = await deleteVehicle(selectedVehicle.id)
+    if (result.success) {
+      setShowDeleteConfirm(false)
+      setSelectedVehicle(null)
     }
   }
 
-  const handleEdit = (vehicle) => {
-    setEditingVehicle(vehicle)
-    setShowAddModal(true)
+  const confirmDelete = (vehicle) => {
+    setSelectedVehicle(vehicle)
+    setShowDeleteConfirm(true)
   }
 
-  const handleDeleteClick = (vehicle) => {
-    setVehicleToDelete(vehicle)
-    setShowDeleteModal(true)
+  const handleFormSuccess = () => {
+    setShowCreateModal(false)
+    setShowEditModal(false)
+    setShowAssignModal(false)
+    setSelectedVehicle(null)
+    loadVehicles(true)
   }
 
-  const handleDelete = async () => {
-    if (!vehicleToDelete) return
-
-    setDeleteLoading(true)
-    try {
-      const { error } = await supabase
-        .from('vehicles')
-        .delete()
-        .eq('id', vehicleToDelete.id)
-
-      if (error) throw error
-
-      toast.success('Vozidlo bylo smazáno')
-      await loadVehicles()
-      setShowDeleteModal(false)
-      setVehicleToDelete(null)
-      
-    } catch (error) {
-      console.error('Error deleting vehicle:', error)
-      toast.error('Chyba při mazání vozidla')
-    } finally {
-      setDeleteLoading(false)
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case VEHICLE_STATUS.ACTIVE:
+        return 'fas fa-check-circle text-green-600'
+      case VEHICLE_STATUS.SERVICE:
+        return 'fas fa-wrench text-orange-600'
+      case VEHICLE_STATUS.RETIRED:
+        return 'fas fa-times-circle text-red-600'
+      default:
+        return 'fas fa-question-circle text-gray-600'
     }
   }
 
-  const handleAddNew = () => {
-    setEditingVehicle(null)
-    reset()
-    setShowAddModal(true)
+  const isDocumentExpiring = (date) => {
+    if (!date) return false
+    const expiryDate = new Date(date)
+    const today = new Date()
+    const nextMonth = new Date()
+    nextMonth.setMonth(nextMonth.getMonth() + 1)
+    return expiryDate <= nextMonth && expiryDate >= today
   }
 
-  const filteredVehicles = getFilteredVehicles()
-  const stats = getVehicleStats()
-  const expiringDocs = getExpiringDocuments()
-
-  const columns = [
-    {
-      key: 'name',
-      title: 'Vozidlo',
-      render: (value, row) => (
-        <div>
-          <div className="font-medium text-gray-900">{value}</div>
-          <div className="text-sm text-gray-500">
-            {row.brand} {row.model} ({row.year})
-          </div>
-        </div>
-      )
-    },
-    {
-      key: 'license_plate',
-      title: 'SPZ',
-      render: (value) => (
-        <div className="font-mono text-sm bg-gray-100 px-2 py-1 rounded inline-block">
-          {value}
-        </div>
-      )
-    },
-    {
-      key: 'type',
-      title: 'Typ',
-      render: (value) => {
-        const type = vehicleTypes.find(t => t.value === value)
-        return type?.label || value
-      }
-    },
-    {
-      key: 'status',
-      title: 'Stav',
-      render: (value) => (
-        <StatusBadge 
-          status={value}
-          statusLabels={STATUS_LABELS}
-          statusColors={STATUS_COLORS}
-        />
-      )
-    },
-    {
-      key: 'assigned_to_name',
-      title: 'Přiřazeno',
-      render: (value) => value || (
-        <span className="text-gray-400 italic">Nepřiřazeno</span>
-      )
-    },
-    {
-      key: 'current_value',
-      title: 'Hodnota',
-      render: (value) => <CurrencyCell amount={value} />
-    },
-    {
-      key: 'expiry_status',
-      title: 'Platnost dokladů',
-      render: (_, row) => {
-        const now = new Date()
-        const thirtyDays = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-        
-        const insuranceExpiry = row.insurance_expiry ? new Date(row.insurance_expiry) : null
-        const stkExpiry = row.stk_expiry ? new Date(row.stk_expiry) : null
-        
-        const insuranceExpiring = insuranceExpiry && insuranceExpiry <= thirtyDays
-        const stkExpiring = stkExpiry && stkExpiry <= thirtyDays
-        
-        if (insuranceExpiring || stkExpiring) {
-          return (
-            <div className="text-red-600">
-              <i className="fas fa-exclamation-triangle mr-1" />
-              Expiruje
-            </div>
-          )
-        }
-        
-        return (
-          <div className="text-green-600">
-            <i className="fas fa-check-circle mr-1" />
-            V pořádku
-          </div>
-        )
-      }
-    },
-    {
-      key: 'actions',
-      title: 'Akce',
-      render: (_, row) => (
-        <div className="flex items-center space-x-2">
-          <ActionButton
-            icon="fas fa-eye"
-            tooltip="Zobrazit detail"
-            onClick={() => console.log('View vehicle details', row)}
-          />
-          <ActionButton
-            icon="fas fa-gas-pump"
-            tooltip="Tankování"
-            onClick={() => console.log('Add fuel record', row)}
-            variant="ghost"
-          />
-          <ActionButton
-            icon="fas fa-wrench"
-            tooltip="Servis"
-            onClick={() => console.log('Add service record', row)}
-            variant="ghost"
-          />
-          <ActionButton
-            icon="fas fa-edit"
-            tooltip="Upravit"
-            onClick={() => handleEdit(row)}
-            variant="ghost"
-          />
-          <ActionButton
-            icon="fas fa-trash"
-            tooltip="Smazat"
-            onClick={() => handleDeleteClick(row)}
-            variant="ghost"
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-          />
-        </div>
-      )
-    }
-  ]
+  const isDocumentExpired = (date) => {
+    if (!date) return false
+    const expiryDate = new Date(date)
+    const today = new Date()
+    return expiryDate < today
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Vozový park</h1>
-          <p className="text-gray-600 mt-1">Správa vozidel a strojů</p>
+          <h1 className="text-2xl font-bold text-gray-900">Vozidla</h1>
+          <p className="text-gray-600 mt-1">Správa firemních vozidel a dokumentů</p>
         </div>
-        <Button onClick={handleAddNew} className="bg-primary-600 hover:bg-primary-700">
-          <i className="fas fa-plus mr-2" />
-          Přidat vozidlo
-        </Button>
+        {hasPermission('vehicles_create') && (
+          <Button 
+            onClick={handleCreateVehicle}
+            className="bg-primary-600 hover:bg-primary-700"
+          >
+            <i className="fas fa-plus mr-2" />
+            Přidat vozidlo
+          </Button>
+        )}
       </div>
-
-      {/* Expiring Documents Alert */}
-      {expiringDocs.length > 0 && (
-        <Card className="border-red-200 bg-red-50">
-          <div className="p-4">
-            <div className="flex items-center">
-              <i className="fas fa-exclamation-triangle text-red-600 mr-3" />
-              <div>
-                <h3 className="text-red-800 font-medium">
-                  Upozornění: Expirující doklady
-                </h3>
-                <p className="text-red-700 text-sm">
-                  {expiringDocs.length} vozidel má expirující pojištění nebo STK do 30 dní
-                </p>
-              </div>
-            </div>
-          </div>
-        </Card>
-      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -437,8 +161,8 @@ const VehiclesPage = () => {
           <div className="p-6">
             <div className="flex items-center">
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600">Celkem vozidel</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+                <p className="text-sm font-medium text-gray-600">Celkem</p>
+                <p className="text-2xl font-bold text-gray-900">{overview.total}</p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                 <i className="fas fa-car text-blue-600" />
@@ -452,7 +176,7 @@ const VehiclesPage = () => {
             <div className="flex items-center">
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-600">Aktivní</p>
-                <p className="text-2xl font-bold text-green-600">{stats.active}</p>
+                <p className="text-2xl font-bold text-green-600">{overview.active}</p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
                 <i className="fas fa-check-circle text-green-600" />
@@ -465,11 +189,11 @@ const VehiclesPage = () => {
           <div className="p-6">
             <div className="flex items-center">
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600">V servisu</p>
-                <p className="text-2xl font-bold text-red-600">{stats.inService}</p>
+                <p className="text-sm font-medium text-gray-600">Přiřazené</p>
+                <p className="text-2xl font-bold text-blue-600">{overview.assigned}</p>
               </div>
-              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                <i className="fas fa-wrench text-red-600" />
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-user text-blue-600" />
               </div>
             </div>
           </div>
@@ -479,8 +203,22 @@ const VehiclesPage = () => {
           <div className="p-6">
             <div className="flex items-center">
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600">Celková hodnota</p>
-                <p className="text-xl font-bold text-gray-900">{formatCurrency(stats.totalValue)}</p>
+                <p className="text-sm font-medium text-gray-600">V servisu</p>
+                <p className="text-2xl font-bold text-orange-600">{overview.inService}</p>
+              </div>
+              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-wrench text-orange-600" />
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Hodnota</p>
+                <p className="text-xl font-bold text-purple-600">{formatCurrency(overview.totalValue)}</p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
                 <i className="fas fa-coins text-purple-600" />
@@ -488,277 +226,369 @@ const VehiclesPage = () => {
             </div>
           </div>
         </Card>
+      </div>
 
-        <Card>
+      {/* Expiring Documents Alert */}
+      {expiringDocuments && expiringDocuments.length > 0 && (
+        <Card className="border-orange-200 bg-orange-50">
           <div className="p-6">
             <div className="flex items-center">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-600">Měsíční náklady</p>
-                <p className="text-xl font-bold text-gray-900">{formatCurrency(stats.monthlyCosts)}</p>
-              </div>
-              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <i className="fas fa-chart-line text-yellow-600" />
+              <i className="fas fa-exclamation-triangle text-orange-600 mr-3" />
+              <div>
+                <h3 className="text-lg font-semibold text-orange-900">
+                  Pozor! Expirující dokumenty
+                </h3>
+                <p className="text-orange-700 mt-1">
+                  {expiringDocuments.length} vozidel má expirující nebo prošlé dokumenty
+                </p>
               </div>
             </div>
           </div>
         </Card>
-      </div>
+      )}
 
       {/* Filters */}
       <Card>
         <div className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Filtry</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Input
-              placeholder="Hledat vozidlo..."
-              value={filters.search}
-              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-              icon="fas fa-search"
-            />
-            <select
-              value={filters.type}
-              onChange={(e) => setFilters(prev => ({ ...prev, type: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            >
-              <option value="">Všechny typy</option>
-              {vehicleTypes.map(type => (
-                <option key={type.value} value={type.value}>{type.label}</option>
-              ))}
-            </select>
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            >
-              <option value="">Všechny stavy</option>
-              <option value={VEHICLE_STATUS.ACTIVE}>{STATUS_LABELS[VEHICLE_STATUS.ACTIVE]}</option>
-              <option value={VEHICLE_STATUS.SERVICE}>{STATUS_LABELS[VEHICLE_STATUS.SERVICE]}</option>
-              <option value={VEHICLE_STATUS.RETIRED}>{STATUS_LABELS[VEHICLE_STATUS.RETIRED]}</option>
-            </select>
-            <Button
-              variant="outline"
-              onClick={() => setFilters({ type: '', status: '', search: '' })}
-            >
-              Vymazat filtry
-            </Button>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Hledat
+              </label>
+              <input
+                type="text"
+                placeholder="Název, značka, SPZ..."
+                value={filters.search}
+                onChange={(e) => setFilters({ search: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Typ
+              </label>
+              <select
+                value={filters.type}
+                onChange={(e) => setFilters({ type: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="">Všechny typy</option>
+                {types.map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Značka
+              </label>
+              <select
+                value={filters.brand}
+                onChange={(e) => setFilters({ brand: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="">Všechny značky</option>
+                {brands.map(brand => (
+                  <option key={brand} value={brand}>{brand}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Stav
+              </label>
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters({ status: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="">Všechny stavy</option>
+                <option value={VEHICLE_STATUS.ACTIVE}>Aktivní</option>
+                <option value={VEHICLE_STATUS.SERVICE}>V servisu</option>
+                <option value={VEHICLE_STATUS.RETIRED}>Vyřazené</option>
+              </select>
+            </div>
+
+            <div className="flex items-end">
+              <Button
+                onClick={clearFilters}
+                variant="outline"
+                className="w-full"
+              >
+                <i className="fas fa-times mr-2" />
+                Vymazat filtry
+              </Button>
+            </div>
           </div>
         </div>
       </Card>
 
       {/* Vehicles Table */}
       <Card>
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">
-            Vozidla ({filteredVehicles.length})
-          </h3>
-          <div className="flex space-x-2">
-            <Button variant="outline" size="sm">
-              <i className="fas fa-download mr-2" />
-              Export
-            </Button>
-            <Button variant="outline" size="sm">
-              <i className="fas fa-upload mr-2" />
-              Import
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Vozidlo
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Stav
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Přiřazeno
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Dokumenty
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Hodnota
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Akce
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {isLoading ? (
+                <tr>
+                  <td colSpan="6" className="px-6 py-12 text-center">
+                    <Spinner size="lg" />
+                  </td>
+                </tr>
+              ) : vehicles.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
+                    <div className="text-center">
+                      <i className="fas fa-car text-4xl text-gray-300 mb-4" />
+                      <p>Žádná vozidla</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                vehicles.map(vehicle => (
+                  <tr key={vehicle.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
+                          <i className="fas fa-car text-gray-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {vehicle.name}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {vehicle.brand} {vehicle.model} • {vehicle.license_plate}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <i className={`${getStatusIcon(vehicle.status)} mr-2`} />
+                        <StatusBadge 
+                          status={vehicle.status}
+                          statusLabels={STATUS_LABELS}
+                          statusColors={STATUS_COLORS}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {vehicle.assigned_to_user ? (
+                        <div className="text-sm">
+                          <div className="font-medium text-gray-900">
+                            {vehicle.assigned_to_user.first_name} {vehicle.assigned_to_user.last_name}
+                          </div>
+                          <div className="text-gray-500">
+                            {vehicle.assigned_to_user.email}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-500">Nepřiřazeno</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm">
+                        {vehicle.insurance_expiry && (
+                          <div className={`flex items-center ${
+                            isDocumentExpired(vehicle.insurance_expiry) ? 'text-red-600' :
+                            isDocumentExpiring(vehicle.insurance_expiry) ? 'text-orange-600' : 'text-gray-500'
+                          }`}>
+                            <i className="fas fa-shield-alt mr-1" />
+                            Pojištění: {formatDate(vehicle.insurance_expiry)}
+                          </div>
+                        )}
+                        {vehicle.stk_expiry && (
+                          <div className={`flex items-center ${
+                            isDocumentExpired(vehicle.stk_expiry) ? 'text-red-600' :
+                            isDocumentExpiring(vehicle.stk_expiry) ? 'text-orange-600' : 'text-gray-500'
+                          }`}>
+                            <i className="fas fa-certificate mr-1" />
+                            STK: {formatDate(vehicle.stk_expiry)}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {vehicle.current_value ? formatCurrency(vehicle.current_value) : 
+                       vehicle.purchase_price ? formatCurrency(vehicle.purchase_price) : '-'
+                      }
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end space-x-2">
+                        {vehicle.status === VEHICLE_STATUS.ACTIVE && !vehicle.assigned_to && (
+                          <Button
+                            onClick={() => handleAssignVehicle(vehicle)}
+                            size="sm"
+                            variant="ghost"
+                            title="Přiřadit"
+                          >
+                            <i className="fas fa-user-plus" />
+                          </Button>
+                        )}
+                        {vehicle.assigned_to && (
+                          <Button
+                            onClick={() => handleUnassignVehicle(vehicle)}
+                            size="sm"
+                            variant="ghost"
+                            title="Odebrat přiřazení"
+                          >
+                            <i className="fas fa-user-minus" />
+                          </Button>
+                        )}
+                        {vehicle.status === VEHICLE_STATUS.ACTIVE && (
+                          <Button
+                            onClick={() => handleSendToService(vehicle)}
+                            size="sm"
+                            variant="ghost"
+                            title="Do servisu"
+                          >
+                            <i className="fas fa-wrench" />
+                          </Button>
+                        )}
+                        {vehicle.status === VEHICLE_STATUS.SERVICE && (
+                          <Button
+                            onClick={() => handleReturnFromService(vehicle)}
+                            size="sm"
+                            variant="ghost"
+                            title="Vrátit ze servisu"
+                          >
+                            <i className="fas fa-undo" />
+                          </Button>
+                        )}
+                        {hasPermission('vehicles_update') && (
+                          <Button
+                            onClick={() => handleEditVehicle(vehicle)}
+                            size="sm"
+                            variant="ghost"
+                            title="Upravit"
+                          >
+                            <i className="fas fa-edit" />
+                          </Button>
+                        )}
+                        {hasPermission('vehicles_delete') && (
+                          <Button
+                            onClick={() => confirmDelete(vehicle)}
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-600 hover:text-red-700"
+                            title="Smazat"
+                          >
+                            <i className="fas fa-trash" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Modals */}
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        title="Přidat vozidlo"
+        size="lg"
+      >
+        <div className="p-6">
+          <div className="text-center py-8">
+            <i className="fas fa-plus text-4xl text-gray-300 mb-4" />
+            <p className="text-gray-500 mb-4">
+              Formulář pro vozidla bude implementován v další verzi
+            </p>
+            <Button onClick={() => setShowCreateModal(false)}>
+              Zavřít
             </Button>
           </div>
         </div>
-        <Table
-          data={filteredVehicles}
-          columns={columns}
-          loading={isLoading}
-          emptyMessage="Žádná vozidla nenalezena"
-        />
-      </Card>
-
-      {/* Add/Edit Modal */}
-      <Modal
-        isOpen={showAddModal}
-        onClose={() => {
-          setShowAddModal(false)
-          setEditingVehicle(null)
-          reset()
-        }}
-        title={editingVehicle ? 'Upravit vozidlo' : 'Nové vozidlo'}
-        size="lg"
-      >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Název vozidla *"
-              {...register('name', { required: 'Název je povinný' })}
-              error={errors.name?.message}
-            />
-            <select
-              {...register('type', { required: 'Typ je povinný' })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="">Vyberte typ</option>
-              {vehicleTypes.map(type => (
-                <option key={type.value} value={type.value}>{type.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              label="Značka"
-              {...register('brand')}
-            />
-            <Input
-              label="Model"
-              {...register('model')}
-            />
-            <Input
-              label="Rok výroby"
-              type="number"
-              min="1900"
-              max={new Date().getFullYear() + 1}
-              {...register('year')}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              label="SPZ *"
-              {...register('license_plate', { required: 'SPZ je povinná' })}
-              error={errors.license_plate?.message}
-              placeholder="1A2 3456"
-            />
-            <Input
-              label="VIN"
-              {...register('vin')}
-            />
-            <select
-              {...register('fuel_type')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-            >
-              {fuelTypes.map(fuel => (
-                <option key={fuel.value} value={fuel.value}>{fuel.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              label="Datum nákupu"
-              type="date"
-              {...register('purchase_date')}
-            />
-            <Input
-              label="Nákupní cena"
-              type="number"
-              step="0.01"
-              {...register('purchase_price')}
-            />
-            <Input
-              label="Současná hodnota"
-              type="number"
-              step="0.01"
-              {...register('current_value')}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              label="Pojištění do"
-              type="date"
-              {...register('insurance_expiry')}
-            />
-            <Input
-              label="STK do"
-              type="date"
-              {...register('stk_expiry')}
-            />
-            <select
-              {...register('status')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-            >
-              <option value={VEHICLE_STATUS.ACTIVE}>{STATUS_LABELS[VEHICLE_STATUS.ACTIVE]}</option>
-              <option value={VEHICLE_STATUS.SERVICE}>{STATUS_LABELS[VEHICLE_STATUS.SERVICE]}</option>
-              <option value={VEHICLE_STATUS.RETIRED}>{STATUS_LABELS[VEHICLE_STATUS.RETIRED]}</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Přiřazeno zaměstnanci
-            </label>
-            <select
-              {...register('assigned_to')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="">Nepřiřazeno</option>
-              {employees.map(employee => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.first_name} {employee.last_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Poznámky
-            </label>
-            <textarea
-              {...register('notes')}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-              placeholder="Dodatečné informace o vozidle..."
-            />
-          </div>
-
-          <div className="flex justify-end space-x-3 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setShowAddModal(false)
-                setEditingVehicle(null)
-                reset()
-              }}
-            >
-              Zrušit
-            </Button>
-            <Button
-              type="submit"
-              loading={submitting}
-              className="bg-primary-600 hover:bg-primary-700"
-            >
-              {editingVehicle ? 'Uložit změny' : 'Přidat vozidlo'}
-            </Button>
-          </div>
-        </form>
       </Modal>
 
-      {/* Delete Modal */}
       <Modal
-        isOpen={showDeleteModal}
-        onClose={() => {
-          setShowDeleteModal(false)
-          setVehicleToDelete(null)
-        }}
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title="Upravit vozidlo"
+        size="lg"
+      >
+        <div className="p-6">
+          <div className="text-center py-8">
+            <i className="fas fa-edit text-4xl text-gray-300 mb-4" />
+            <p className="text-gray-500 mb-4">
+              Formulář pro úpravu vozidel bude implementován v další verzi
+            </p>
+            <Button onClick={() => setShowEditModal(false)}>
+              Zavřít
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showAssignModal}
+        onClose={() => setShowAssignModal(false)}
+        title="Přiřadit vozidlo"
+        size="md"
+      >
+        <div className="p-6">
+          <div className="text-center py-8">
+            <i className="fas fa-user-plus text-4xl text-gray-300 mb-4" />
+            <p className="text-gray-500 mb-4">
+              Formulář pro přiřazení bude implementován v další verzi
+            </p>
+            <Button onClick={() => setShowAssignModal(false)}>
+              Zavřít
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Confirmation */}
+      <Modal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
         title="Smazat vozidlo"
-        size="sm"
       >
         <div className="space-y-4">
           <p className="text-gray-600">
-            Opravdu chcete smazat vozidlo "{vehicleToDelete?.name}"? Tato akce je nevratná.
+            Opravdu chcete smazat vozidlo <strong>{selectedVehicle?.name}</strong>?
+            Tato akce nelze vrátit zpět.
           </p>
           <div className="flex justify-end space-x-3">
             <Button
+              onClick={() => setShowDeleteConfirm(false)}
               variant="outline"
-              onClick={() => {
-                setShowDeleteModal(false)
-                setVehicleToDelete(null)
-              }}
             >
               Zrušit
             </Button>
             <Button
+              onClick={handleDeleteVehicle}
               variant="danger"
-              loading={deleteLoading}
-              onClick={handleDelete}
             >
               Smazat
             </Button>
