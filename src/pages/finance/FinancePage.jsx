@@ -5,8 +5,6 @@ import useAuthStore from '../../store/authStore'
 import { Button, Card, StatCard, Modal, Spinner } from '../../components/ui'
 import { usePermissions } from '../../components/common/ProtectedRoute'
 import { formatCurrency, formatDate } from '../../utils/helpers'
-import TransactionForm from './components/TransactionForm'
-import InvoiceForm from './components/InvoiceForm'
 
 const FinancePage = () => {
   const navigate = useNavigate()
@@ -26,8 +24,6 @@ const FinancePage = () => {
   const [activeTab, setActiveTab] = useState('overview')
   const [showTransactionModal, setShowTransactionModal] = useState(false)
   const [showInvoiceModal, setShowInvoiceModal] = useState(false)
-  const [selectedTransaction, setSelectedTransaction] = useState(null)
-  const [selectedInvoice, setSelectedInvoice] = useState(null)
 
   // Load data on mount
   useEffect(() => {
@@ -44,25 +40,6 @@ const FinancePage = () => {
   }, [loadTransactions, loadInvoices, loadFinancialSummary])
 
   const overview = getFinanceOverview()
-
-  const handleCreateTransaction = () => {
-    setSelectedTransaction(null)
-    setShowTransactionModal(true)
-  }
-
-  const handleCreateInvoice = () => {
-    setSelectedInvoice(null)
-    setShowInvoiceModal(true)
-  }
-
-  const handleFormSuccess = () => {
-    setShowTransactionModal(false)
-    setShowInvoiceModal(false)
-    setSelectedTransaction(null)
-    setSelectedInvoice(null)
-    loadTransactions(true)
-    loadInvoices(true)
-  }
 
   const tabs = [
     { id: 'overview', label: 'Přehled', icon: 'fas fa-chart-line' },
@@ -82,14 +59,14 @@ const FinancePage = () => {
           {hasPermission('finance_create') && (
             <>
               <Button 
-                onClick={handleCreateTransaction}
+                onClick={() => setShowTransactionModal(true)}
                 variant="outline"
               >
                 <i className="fas fa-plus mr-2" />
                 Přidat transakci
               </Button>
               <Button 
-                onClick={handleCreateInvoice}
+                onClick={() => setShowInvoiceModal(true)}
                 className="bg-primary-600 hover:bg-primary-700"
               >
                 <i className="fas fa-plus mr-2" />
@@ -236,31 +213,38 @@ const FinancePage = () => {
                 </h3>
               </div>
               <div className="p-6">
-                {transactions.slice(0, 5).map(transaction => (
-                  <div key={transaction.id} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-                    <div className="flex items-center">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center mr-3 ${
-                        transaction.type === 'income' ? 'bg-green-100' : 'bg-red-100'
-                      }`}>
-                        <i className={`fas ${
-                          transaction.type === 'income' ? 'fa-arrow-up text-green-600' : 'fa-arrow-down text-red-600'
-                        }`} />
+                {transactions && transactions.length > 0 ? (
+                  transactions.slice(0, 5).map(transaction => (
+                    <div key={transaction.id} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
+                      <div className="flex items-center">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center mr-3 ${
+                          transaction.type === 'income' ? 'bg-green-100' : 'bg-red-100'
+                        }`}>
+                          <i className={`fas ${
+                            transaction.type === 'income' ? 'fa-arrow-up text-green-600' : 'fa-arrow-down text-red-600'
+                          }`} />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{transaction.description}</p>
+                          <p className="text-sm text-gray-500">{transaction.category}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{transaction.description}</p>
-                        <p className="text-sm text-gray-500">{transaction.category}</p>
+                      <div className="text-right">
+                        <p className={`font-semibold ${
+                          transaction.type === 'income' ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
+                        </p>
+                        <p className="text-sm text-gray-500">{formatDate(transaction.transaction_date)}</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className={`font-semibold ${
-                        transaction.type === 'income' ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
-                      </p>
-                      <p className="text-sm text-gray-500">{formatDate(transaction.transaction_date)}</p>
-                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <i className="fas fa-exchange-alt text-4xl text-gray-300 mb-4" />
+                    <p>Žádné transakce</p>
                   </div>
-                ))}
+                )}
               </div>
             </Card>
           </div>
@@ -269,9 +253,10 @@ const FinancePage = () => {
         {activeTab === 'transactions' && (
           <Card>
             <div className="p-6">
-              <p className="text-center text-gray-500">
-                Transakce budou implementovány v další verzi
-              </p>
+              <div className="text-center py-12">
+                <i className="fas fa-exchange-alt text-4xl text-gray-300 mb-4" />
+                <p className="text-gray-500">Transakce budou implementovány v další verzi</p>
+              </div>
             </div>
           </Card>
         )}
@@ -279,9 +264,10 @@ const FinancePage = () => {
         {activeTab === 'invoices' && (
           <Card>
             <div className="p-6">
-              <p className="text-center text-gray-500">
-                Faktury budou implementovány v další verzi
-              </p>
+              <div className="text-center py-12">
+                <i className="fas fa-file-invoice text-4xl text-gray-300 mb-4" />
+                <p className="text-gray-500">Faktury budou implementovány v další verzi</p>
+              </div>
             </div>
           </Card>
         )}
@@ -295,9 +281,15 @@ const FinancePage = () => {
         size="lg"
       >
         <div className="p-6">
-          <p className="text-center text-gray-500">
-            Formulář pro transakce bude implementován v další verzi
-          </p>
+          <div className="text-center py-8">
+            <i className="fas fa-plus text-4xl text-gray-300 mb-4" />
+            <p className="text-gray-500 mb-4">
+              Formulář pro transakce bude implementován v další verzi
+            </p>
+            <Button onClick={() => setShowTransactionModal(false)}>
+              Zavřít
+            </Button>
+          </div>
         </div>
       </Modal>
 
@@ -308,9 +300,15 @@ const FinancePage = () => {
         size="lg"
       >
         <div className="p-6">
-          <p className="text-center text-gray-500">
-            Formulář pro faktury bude implementován v další verzi
-          </p>
+          <div className="text-center py-8">
+            <i className="fas fa-file-invoice text-4xl text-gray-300 mb-4" />
+            <p className="text-gray-500 mb-4">
+              Formulář pro faktury bude implementován v další verzi
+            </p>
+            <Button onClick={() => setShowInvoiceModal(false)}>
+              Zavřít
+            </Button>
+          </div>
         </div>
       </Modal>
     </div>
