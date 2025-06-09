@@ -1,496 +1,316 @@
 import React, { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useNavigate } from 'react-router-dom'
 import useFinanceStore from '../../store/financeStore'
 import useAuthStore from '../../store/authStore'
-import { Button, Table, Card, Input, Modal, StatusBadge, CurrencyCell, DateCell, ActionButton } from '../../components/ui'
-import { TRANSACTION_TYPES, EXPENSE_CATEGORIES } from '../../utils/constants'
+import { Button, Card, StatCard, Modal, Spinner } from '../../components/ui'
+import { usePermissions } from '../../components/common/ProtectedRoute'
 import { formatCurrency, formatDate } from '../../utils/helpers'
-import toast from 'react-hot-toast'
+import TransactionForm from './components/TransactionForm'
+import InvoiceForm from './components/InvoiceForm'
 
 const FinancePage = () => {
+  const navigate = useNavigate()
   const { profile } = useAuthStore()
   const { 
-    transactions, 
-    loadTransactions, 
-    addTransaction,
-    updateTransaction,
-    deleteTransaction,
-    filters, 
-    setFilters, 
-    getFilteredTransactions,
-    getFinancialStats,
-    getTransactionsByCategory,
-    isLoading 
+    transactions,
+    invoices,
+    financialSummary,
+    isLoading,
+    loadTransactions,
+    loadInvoices,
+    loadFinancialSummary,
+    getFinanceOverview
   } = useFinanceStore()
+  const { hasPermission } = usePermissions()
+  
+  const [activeTab, setActiveTab] = useState('overview')
+  const [showTransactionModal, setShowTransactionModal] = useState(false)
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false)
+  const [selectedTransaction, setSelectedTransaction] = useState(null)
+  const [selectedInvoice, setSelectedInvoice] = useState(null)
 
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [editingTransaction, setEditingTransaction] = useState(null)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [transactionToDelete, setTransactionToDelete] = useState(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [deleteLoading, setDeleteLoading] = useState(false)
-
-  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm({
-    defaultValues: {
-      type: TRANSACTION_TYPES.EXPENSE,
-      description: '',
-      amount: '',
-      category: '',
-      transaction_date: new Date().toISOString().split('T')[0],
-      note: ''
-    }
-  })
-
-  const watchType = watch('type')
-
+  // Load data on mount
   useEffect(() => {
+    const currentMonth = new Date()
+    const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
+    const lastDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0)
+    
     loadTransactions()
-  }, [loadTransactions])
+    loadInvoices()
+    loadFinancialSummary(
+      firstDay.toISOString().split('T')[0],
+      lastDay.toISOString().split('T')[0]
+    )
+  }, [loadTransactions, loadInvoices, loadFinancialSummary])
 
-  useEffect(() => {
-    if (editingTransaction) {
-      Object.keys(editingTransaction).forEach(key => {
-        if (key === 'transaction_date') {
-          setValue(key, editingTransaction[key]?.split('T')[0])
-        } else {
-          setValue(key, editingTransaction[key] || '')
-        }
-      })
-    }
-  }, [editingTransaction, setValue])
+  const overview = getFinanceOverview()
 
-  const filteredTransactions = getFilteredTransactions()
-  const stats = getFinancialStats()
-  const categoryStats = getTransactionsByCategory()
-
-  const onSubmit = async (data) => {
-    setSubmitting(true)
-    try {
-      let result
-      if (editingTransaction) {
-        result = await updateTransaction(editingTransaction.id, data)
-      } else {
-        result = await addTransaction(data, profile.id)
-      }
-
-      if (result.success) {
-        toast.success(editingTransaction ? 'Transakce upravena' : 'Transakce přidána')
-        handleCloseModal()
-      } else {
-        toast.error(result.error || 'Chyba při ukládání')
-      }
-    } finally {
-      setSubmitting(false)
-    }
+  const handleCreateTransaction = () => {
+    setSelectedTransaction(null)
+    setShowTransactionModal(true)
   }
 
-  const handleCloseModal = () => {
-    setShowAddModal(false)
-    setEditingTransaction(null)
-    reset()
+  const handleCreateInvoice = () => {
+    setSelectedInvoice(null)
+    setShowInvoiceModal(true)
   }
 
-  const handleEdit = (transaction) => {
-    setEditingTransaction(transaction)
-    setShowAddModal(true)
+  const handleFormSuccess = () => {
+    setShowTransactionModal(false)
+    setShowInvoiceModal(false)
+    setSelectedTransaction(null)
+    setSelectedInvoice(null)
+    loadTransactions(true)
+    loadInvoices(true)
   }
 
-  const handleDeleteClick = (transaction) => {
-    setTransactionToDelete(transaction)
-    setShowDeleteModal(true)
-  }
-
-  const handleDelete = async () => {
-    if (!transactionToDelete) return
-
-    setDeleteLoading(true)
-    try {
-      const result = await deleteTransaction(transactionToDelete.id)
-      if (result.success) {
-        toast.success('Transakce smazána')
-        setShowDeleteModal(false)
-        setTransactionToDelete(null)
-      }
-    } finally {
-      setDeleteLoading(false)
-    }
-  }
-
-  const columns = [
-    {
-      key: 'type',
-      title: 'Typ',
-      render: (value) => (
-        <div className="flex items-center">
-          <i className={`fas ${value === TRANSACTION_TYPES.INCOME ? 'fa-arrow-up text-green-600' : 'fa-arrow-down text-red-600'} mr-2`} />
-          <span>{value === TRANSACTION_TYPES.INCOME ? 'Příjem' : 'Výdaj'}</span>
-        </div>
-      )
-    },
-    {
-      key: 'description',
-      title: 'Popis',
-      render: (value) => (
-        <div className="max-w-xs">
-          <p className="font-medium truncate">{value}</p>
-        </div>
-      )
-    },
-    {
-      key: 'amount',
-      title: 'Částka',
-      render: (value, row) => (
-        <CurrencyCell 
-          amount={value}
-          positive={row.type === TRANSACTION_TYPES.INCOME}
-          negative={row.type === TRANSACTION_TYPES.EXPENSE}
-        />
-      )
-    },
-    {
-      key: 'category',
-      title: 'Kategorie',
-      render: (value) => value || '-'
-    },
-    {
-      key: 'transaction_date',
-      title: 'Datum',
-      render: (value) => <DateCell date={value} />
-    },
-    {
-      key: 'actions',
-      title: 'Akce',
-      render: (_, row) => (
-        <div className="flex items-center space-x-2">
-          <ActionButton
-            icon="fas fa-edit"
-            tooltip="Upravit"
-            onClick={() => handleEdit(row)}
-          />
-          <ActionButton
-            icon="fas fa-trash"
-            tooltip="Smazat"
-            onClick={() => handleDeleteClick(row)}
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-          />
-        </div>
-      )
-    }
+  const tabs = [
+    { id: 'overview', label: 'Přehled', icon: 'fas fa-chart-line' },
+    { id: 'transactions', label: 'Transakce', icon: 'fas fa-exchange-alt' },
+    { id: 'invoices', label: 'Faktury', icon: 'fas fa-file-invoice' }
   ]
-
-  const incomeCategories = [
-    'Faktury',
-    'Hotovostní platby',
-    'Bankovní převody',
-    'Dotace',
-    'Ostatní příjmy'
-  ]
-
-  const expenseCategories = [
-    'Materiál',
-    'Mzdy',
-    'Nářadí',
-    'Pohonné hmoty',
-    'Servis',
-    'Pojištění',
-    'Kancelář',
-    'Marketing',
-    'Ostatní'
-  ]
-
-  const currentCategories = watchType === TRANSACTION_TYPES.INCOME ? incomeCategories : expenseCategories
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Finance & Účetnictví</h1>
-          <p className="text-gray-600">Správa příjmů, výdajů a účetnictví</p>
+          <h1 className="text-2xl font-bold text-gray-900">Finance</h1>
+          <p className="text-gray-600 mt-1">Přehled financí, transakcí a faktur</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Button
-            variant="success"
-            onClick={() => {
-              reset({ type: TRANSACTION_TYPES.INCOME })
-              setShowAddModal(true)
-            }}
-            icon="fas fa-plus"
-          >
-            Přidat příjem
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              reset({ type: TRANSACTION_TYPES.EXPENSE })
-              setShowAddModal(true)
-            }}
-            icon="fas fa-plus"
-          >
-            Přidat výdaj
-          </Button>
+        <div className="flex space-x-3">
+          {hasPermission('finance_create') && (
+            <>
+              <Button 
+                onClick={handleCreateTransaction}
+                variant="outline"
+              >
+                <i className="fas fa-plus mr-2" />
+                Přidat transakci
+              </Button>
+              <Button 
+                onClick={handleCreateInvoice}
+                className="bg-primary-600 hover:bg-primary-700"
+              >
+                <i className="fas fa-plus mr-2" />
+                Vytvořit fakturu
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Financial Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-arrow-up text-green-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Měsíční příjmy</p>
-              <p className="text-2xl font-bold text-green-600">{formatCurrency(stats.monthlyIncome)}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-arrow-down text-red-600 text-xl" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Měsíční výdaje</p>
-              <p className="text-2xl font-bold text-red-600">{formatCurrency(stats.monthlyExpenses)}</p>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Příjmy</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {formatCurrency(overview.totalIncome)}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-arrow-up text-green-600" />
+              </div>
             </div>
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-chart-line text-blue-600 text-xl" />
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Výdaje</p>
+                <p className="text-2xl font-bold text-red-600">
+                  {formatCurrency(overview.totalExpenses)}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-arrow-down text-red-600" />
+              </div>
             </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Měsíční zisk</p>
-              <p className={`text-2xl font-bold ${stats.monthlyProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {formatCurrency(stats.monthlyProfit)}
+          </div>
+        </Card>
+
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Zisk</p>
+                <p className={`text-2xl font-bold ${overview.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {formatCurrency(overview.profit)}
+                </p>
+              </div>
+              <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                overview.profit >= 0 ? 'bg-green-100' : 'bg-red-100'
+              }`}>
+                <i className={`fas fa-chart-line ${
+                  overview.profit >= 0 ? 'text-green-600' : 'text-red-600'
+                }`} />
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="p-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600">Faktury k úhradě</p>
+                <p className="text-2xl font-bold text-orange-600">{overview.pendingInvoices}</p>
+              </div>
+              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                <i className="fas fa-clock text-orange-600" />
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === tab.id
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <i className={`${tab.icon} mr-2`} />
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Tab Content */}
+      <div>
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            {/* Financial Summary */}
+            <Card>
+              <div className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  Finanční přehled za tento měsíc
+                </h3>
+                {financialSummary ? (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                      <p className="text-sm text-gray-600">Celkem vyfakturováno</p>
+                      <p className="text-xl font-semibold text-gray-900">
+                        {formatCurrency(financialSummary.totalInvoiced)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Zaplaceno</p>
+                      <p className="text-xl font-semibold text-green-600">
+                        {formatCurrency(financialSummary.totalPaid)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">K úhradě</p>
+                      <p className="text-xl font-semibold text-orange-600">
+                        {formatCurrency(financialSummary.outstanding)}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <Spinner />
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* Recent Transactions */}
+            <Card>
+              <div className="p-6 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Nedávné transakce
+                </h3>
+              </div>
+              <div className="p-6">
+                {transactions.slice(0, 5).map(transaction => (
+                  <div key={transaction.id} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
+                    <div className="flex items-center">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center mr-3 ${
+                        transaction.type === 'income' ? 'bg-green-100' : 'bg-red-100'
+                      }`}>
+                        <i className={`fas ${
+                          transaction.type === 'income' ? 'fa-arrow-up text-green-600' : 'fa-arrow-down text-red-600'
+                        }`} />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{transaction.description}</p>
+                        <p className="text-sm text-gray-500">{transaction.category}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-semibold ${
+                        transaction.type === 'income' ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
+                      </p>
+                      <p className="text-sm text-gray-500">{formatDate(transaction.transaction_date)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {activeTab === 'transactions' && (
+          <Card>
+            <div className="p-6">
+              <p className="text-center text-gray-500">
+                Transakce budou implementovány v další verzi
               </p>
             </div>
-          </div>
-        </Card>
+          </Card>
+        )}
 
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <i className="fas fa-list text-yellow-600 text-xl" />
+        {activeTab === 'invoices' && (
+          <Card>
+            <div className="p-6">
+              <p className="text-center text-gray-500">
+                Faktury budou implementovány v další verzi
+              </p>
             </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">Celkem transakcí</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.transactionCount}</p>
-            </div>
-          </div>
-        </Card>
+          </Card>
+        )}
       </div>
 
-      {/* Filters */}
-      <Card>
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Filtry</h2>
-        </div>
-        <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <Input
-              type="text"
-              placeholder="Hledat transakce..."
-              value={filters.search}
-              onChange={(e) => setFilters({ search: e.target.value })}
-              icon="fas fa-search"
-            />
-            
-            <Input
-              type="select"
-              value={filters.type}
-              onChange={(e) => setFilters({ type: e.target.value })}
-            >
-              <option value="">Všechny typy</option>
-              <option value={TRANSACTION_TYPES.INCOME}>Příjmy</option>
-              <option value={TRANSACTION_TYPES.EXPENSE}>Výdaje</option>
-            </Input>
-
-            <Input
-              type="date"
-              value={filters.dateFrom}
-              onChange={(e) => setFilters({ dateFrom: e.target.value })}
-              placeholder="Od data"
-            />
-
-            <Input
-              type="date"
-              value={filters.dateTo}
-              onChange={(e) => setFilters({ dateTo: e.target.value })}
-              placeholder="Do data"
-            />
-
-            <Button
-              variant="outline"
-              onClick={() => setFilters({ search: '', type: '', category: '', dateFrom: '', dateTo: '' })}
-              size="sm"
-            >
-              Vymazat filtry
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      {/* Transactions Table */}
-      <Card>
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Transakce ({filteredTransactions.length})
-            </h2>
-          </div>
-        </div>
-        
-        <Table
-          columns={columns}
-          data={filteredTransactions}
-          loading={isLoading}
-          emptyMessage="Žádné transakce nenalezeny"
-          emptyIcon="fas fa-coins"
-        />
-      </Card>
-
-      {/* Add/Edit Transaction Modal */}
+      {/* Modals */}
       <Modal
-        isOpen={showAddModal}
-        onClose={handleCloseModal}
-        title={editingTransaction ? 'Upravit transakci' : 'Nová transakce'}
+        isOpen={showTransactionModal}
+        onClose={() => setShowTransactionModal(false)}
+        title="Přidat transakci"
         size="lg"
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={handleCloseModal}
-              disabled={submitting}
-            >
-              Zrušit
-            </Button>
-            <Button
-              onClick={handleSubmit(onSubmit)}
-              loading={submitting}
-              icon="fas fa-save"
-            >
-              {editingTransaction ? 'Uložit změny' : 'Přidat transakci'}
-            </Button>
-          </>
-        }
       >
-        <form className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              {...register('type', { required: 'Typ je povinný' })}
-              label="Typ transakce"
-              type="select"
-              error={errors.type?.message}
-              required
-            >
-              <option value={TRANSACTION_TYPES.INCOME}>Příjem</option>
-              <option value={TRANSACTION_TYPES.EXPENSE}>Výdaj</option>
-            </Input>
-            
-            <Input
-              {...register('transaction_date', { required: 'Datum je povinné' })}
-              label="Datum"
-              type="date"
-              error={errors.transaction_date?.message}
-              required
-            />
-          </div>
-
-          <Input
-            {...register('description', { required: 'Popis je povinný' })}
-            label="Popis"
-            type="text"
-            placeholder="Popis transakce..."
-            error={errors.description?.message}
-            required
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              {...register('amount', { 
-                required: 'Částka je povinná',
-                min: { value: 0.01, message: 'Částka musí být větší než 0' }
-              })}
-              label="Částka"
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              suffix="Kč"
-              error={errors.amount?.message}
-              required
-            />
-            
-            <Input
-              {...register('category')}
-              label="Kategorie"
-              type="select"
-            >
-              <option value="">Vyberte kategorii</option>
-              {currentCategories.map(category => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </Input>
-          </div>
-
-          <Input
-            {...register('note')}
-            label="Poznámka"
-            type="textarea"
-            rows={3}
-            placeholder="Dodatečné poznámky..."
-          />
-        </form>
+        <div className="p-6">
+          <p className="text-center text-gray-500">
+            Formulář pro transakce bude implementován v další verzi
+          </p>
+        </div>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
       <Modal
-        isOpen={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
-        title="Smazat transakci"
-        size="sm"
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => setShowDeleteModal(false)}
-              disabled={deleteLoading}
-            >
-              Zrušit
-            </Button>
-            <Button
-              variant="danger"
-              onClick={handleDelete}
-              loading={deleteLoading}
-            >
-              Smazat
-            </Button>
-          </>
-        }
+        isOpen={showInvoiceModal}
+        onClose={() => setShowInvoiceModal(false)}
+        title="Vytvořit fakturu"
+        size="lg"
       >
-        <div className="space-y-4">
-          <div className="flex items-center space-x-3 text-red-600">
-            <i className="fas fa-exclamation-triangle text-2xl" />
-            <div>
-              <p className="font-medium">Opravdu chcete smazat tuto transakci?</p>
-              <p className="text-sm text-gray-600 mt-1">Tato akce je nevratná.</p>
-            </div>
-          </div>
-          
-          {transactionToDelete && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="font-medium text-gray-900">{transactionToDelete.description}</p>
-              <p className="text-sm text-gray-600 mt-1">
-                {formatCurrency(transactionToDelete.amount)} • {formatDate(transactionToDelete.transaction_date)}
-              </p>
-            </div>
-          )}
+        <div className="p-6">
+          <p className="text-center text-gray-500">
+            Formulář pro faktury bude implementován v další verzi
+          </p>
         </div>
       </Modal>
     </div>
