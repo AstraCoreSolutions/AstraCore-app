@@ -5,6 +5,8 @@ import useAuthStore from '../../store/authStore'
 import { Button, Card, StatusBadge, Modal, Spinner } from '../../components/ui'
 import { usePermissions } from '../../components/common/ProtectedRoute'
 import { formatDate, formatCurrency } from '../../utils/helpers'
+
+// Import components directly
 import ClientForm from './components/ClientForm'
 import ClientDetail from './components/ClientDetail'
 
@@ -73,7 +75,7 @@ const ClientsPage = () => {
     setShowCreateModal(false)
     setShowEditModal(false)
     setSelectedClient(null)
-    loadClients(true) // Force refresh
+    loadClients(true)
   }
 
   return (
@@ -249,8 +251,10 @@ const ClientsPage = () => {
               ) : clients.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
-                    <i className="fas fa-users text-4xl text-gray-300 mb-4" />
-                    <p>Žádní klienti</p>
+                    <div className="text-center">
+                      <i className="fas fa-users text-4xl text-gray-300 mb-4" />
+                      <p>Žádní klienti</p>
+                    </div>
                   </td>
                 </tr>
               ) : (
